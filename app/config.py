@@ -1,0 +1,58 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ConfigurationError(Exception):
+    """Raised when a required environment variable is missing at startup."""
+    pass
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    # Vapi
+    VAPI_API_KEY: str
+    VAPI_ASSISTANT_ID: str
+    VAPI_PHONE_NUMBER_ID: str
+
+    # Qdrant
+    QDRANT_API_KEY: str
+    QDRANT_ENDPOINT: str
+
+    # OpenAI-compatible LLM
+    OPENAI_API_KEY: str
+    OPENAI_BASE_URL: str
+    OPENAI_MODEL: str
+
+    # Google Calendar (optional)
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REFRESH_TOKEN: str = ""
+
+
+_REQUIRED_VARS = [
+    "VAPI_API_KEY",
+    "VAPI_ASSISTANT_ID",
+    "VAPI_PHONE_NUMBER_ID",
+    "QDRANT_API_KEY",
+    "QDRANT_ENDPOINT",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_MODEL",
+]
+
+
+def get_settings() -> Settings:
+    """
+    Load and validate settings. Raises ConfigurationError with the variable name
+    if any required env var is missing.
+    """
+    import os
+
+    for var in _REQUIRED_VARS:
+        if not os.environ.get(var):
+            raise ConfigurationError(
+                f"Required environment variable '{var}' is missing. "
+                f"Please set it before starting the application."
+            )
+
+    return Settings()

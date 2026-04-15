@@ -1,0 +1,12 @@
+# Kiro
+.kiro/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Env
+.env

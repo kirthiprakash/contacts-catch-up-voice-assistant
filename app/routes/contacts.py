@@ -98,6 +98,27 @@ async def update_contact(contact_id: str, contact: Contact):
         await db.close()
 
 
+@router.get("/{contact_id}/memories")
+async def get_contact_memories(contact_id: str, limit: int = 30):
+    """Return recent memories for a contact."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT contact_id FROM contacts WHERE contact_id = ?", (contact_id,)
+        )
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Contact not found")
+    finally:
+        await db.close()
+
+    try:
+        from app.services.qdrant import search_memory
+        entries = await search_memory(contact_id, contact_id, top_k=limit)
+        return [{"text": e.text, "type": e.type, "timestamp": e.timestamp.isoformat()} for e in entries]
+    except Exception as exc:
+        return []
+
+
 @router.delete("/{contact_id}", status_code=204)
 async def delete_contact(contact_id: str):
     """Delete a contact and all associated memory entries."""

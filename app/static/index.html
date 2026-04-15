@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contacts Catch-Up</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#f0f9ff', 500:'#0ea5e9', 600:'#0284c7', 700:'#0369a1' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .ring-brand { --tw-ring-color: #0ea5e9; }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 font-sans antialiased">
+
+<div id="app" class="h-full flex flex-col">
+
+  <!-- Top bar -->
+  <header class="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 rounded-lg bg-sky-500 flex items-center justify-center">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/>
+        </svg>
+      </div>
+      <span class="font-semibold text-slate-100">Contacts Catch-Up</span>
+    </div>
+    <button onclick="openModal()" class="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+      New Contact
+    </button>
+  </header>
+
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-72 shrink-0 flex flex-col border-r border-slate-800 bg-slate-900">
+      <div class="p-3 border-b border-slate-800">
+        <div class="relative">
+          <svg class="absolute left-2.5 top-2.5 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+          <input id="search" type="text" placeholder="Search contacts…" oninput="filterContacts(this.value)"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+        </div>
+      </div>
+      <div id="contact-list" class="flex-1 overflow-y-auto py-1"></div>
+    </aside>
+
+    <!-- Main panel -->
+    <main class="flex-1 overflow-y-auto bg-slate-950" id="main-panel">
+      <div class="h-full flex items-center justify-center text-slate-600">
+        <div class="text-center">
+          <svg class="w-12 h-12 mx-auto mb-3 text-slate-800" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/>
+          </svg>
+          <p class="text-sm">Select a contact or create one</p>
+        </div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+    <div class="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto pointer-events-auto">
+      <div class="flex items-center justify-between p-5 border-b border-slate-800">
+        <h2 id="modal-title" class="text-lg font-semibold">New Contact</h2>
+        <button onclick="closeModal()" class="text-slate-500 hover:text-slate-300 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <form id="contact-form" onsubmit="submitContactForm(event)" class="p-5 space-y-4">
+        <input type="hidden" id="form-contact-id" value="" />
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-slate-400 mb-1">Full Name *</label>
+            <input id="f-name" type="text" required placeholder="Alice Smith"
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-slate-400 mb-1">Contact Method *</label>
+            <div class="flex gap-2">
+              <button type="button" id="method-phone" onclick="setMethod('phone')"
+                class="flex-1 py-2 text-sm rounded-lg border transition-colors method-btn method-active">
+                📞 Phone
+              </button>
+              <button type="button" id="method-sip" onclick="setMethod('sip')"
+                class="flex-1 py-2 text-sm rounded-lg border transition-colors method-btn">
+                🌐 SIP
+              </button>
+            </div>
+          </div>
+
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-slate-400 mb-1">Phone Number (E.164) *</label>
+            <input id="f-phone" type="text" required placeholder="+12125551234"
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+
+          <div class="col-span-2" id="sip-row" style="display:none">
+            <label class="block text-xs font-medium text-slate-400 mb-1">SIP URI *</label>
+            <input id="f-sip" type="text" placeholder="sip:alice@sip.example.com"
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-slate-400 mb-1">Timezone *</label>
+            <select id="f-timezone" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500">
+              <option value="">Select timezone…</option>
+              <option>America/New_York</option>
+              <option>America/Chicago</option>
+              <option>America/Denver</option>
+              <option>America/Los_Angeles</option>
+              <option>America/Sao_Paulo</option>
+              <option>Europe/London</option>
+              <option>Europe/Paris</option>
+              <option>Europe/Berlin</option>
+              <option>Asia/Kolkata</option>
+              <option>Asia/Singapore</option>
+              <option>Asia/Tokyo</option>
+              <option>Australia/Sydney</option>
+              <option>Pacific/Auckland</option>
+            </select>
+          </div>
+
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-slate-400 mb-1">Tags <span class="text-slate-600">(comma-separated)</span></label>
+            <input id="f-tags" type="text" placeholder="friend, college, tech"
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Call Time Preference</label>
+            <select id="f-pref" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500">
+              <option value="none">Any time</option>
+              <option value="morning">Morning</option>
+              <option value="evening">Evening</option>
+              <option value="specific_time">Specific time</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Priority Boost</label>
+            <input id="f-boost" type="number" min="0" max="10" step="0.5" value="0" placeholder="0"
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+
+          <div id="time-window-row" class="col-span-2 grid grid-cols-2 gap-2" style="display:none">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Window Start (HH:MM)</label>
+              <input id="f-tw-start" type="time" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Window End (HH:MM)</label>
+              <input id="f-tw-end" type="time" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+            </div>
+          </div>
+
+          <!-- Social handles -->
+          <div class="col-span-2 border-t border-slate-800 pt-3">
+            <p class="text-xs font-medium text-slate-400 mb-2">Social Handles <span class="text-slate-600">(optional)</span></p>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <span class="text-slate-500 text-sm w-20 shrink-0">Twitter</span>
+                <input id="f-twitter" type="text" placeholder="@handle"
+                  class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-slate-500 text-sm w-20 shrink-0">Instagram</span>
+                <input id="f-instagram" type="text" placeholder="@handle"
+                  class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-slate-500 text-sm w-20 shrink-0">LinkedIn</span>
+                <input id="f-linkedin" type="text" placeholder="username"
+                  class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="form-error" class="hidden text-sm text-red-400 bg-red-950/50 border border-red-900 rounded-lg px-3 py-2"></div>
+
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
+            <span id="form-submit-label">Create Contact</span>
+          </button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 text-sm text-slate-400 hover:text-slate-200 transition-colors">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm dialog -->
+<div id="delete-dialog" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeDeleteDialog()"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+    <div class="relative bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm pointer-events-auto text-center">
+      <div class="w-12 h-12 rounded-full bg-red-950 flex items-center justify-center mx-auto mb-3">
+        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>
+      </div>
+      <h3 class="font-semibold mb-1">Delete Contact?</h3>
+      <p class="text-sm text-slate-400 mb-4">This will permanently delete the contact and all their memories.</p>
+      <div class="flex gap-2">
+        <button onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg transition-colors">Delete</button>
+        <button onclick="closeDeleteDialog()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-sm py-2 rounded-lg transition-colors">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let contacts = [];
+let selectedId = null;
+let deleteTargetId = null;
+let activeCallId = null;
+let sseSource = null;
+let callTimer = null;
+let callSeconds = 0;
+let currentMethod = 'phone';
+
+// ─── Bootstrap ───────────────────────────────────────────────────────────────
+async function init() {
+  await loadContacts();
+  const hash = location.hash.replace('#', '');
+  if (hash) selectContact(hash);
+}
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(err.detail || r.statusText);
+  }
+  if (r.status === 204) return null;
+  return r.json();
+}
+
+// ─── Contacts list ────────────────────────────────────────────────────────────
+async function loadContacts() {
+  contacts = await api('GET', '/api/contacts');
+  contacts.sort((a, b) => a.name.localeCompare(b.name));
+  renderList(contacts);
+}
+
+function filterContacts(q) {
+  const filtered = q ? contacts.filter(c =>
+    c.name.toLowerCase().includes(q.toLowerCase()) ||
+    (c.tags || []).some(t => t.toLowerCase().includes(q.toLowerCase()))
+  ) : contacts;
+  renderList(filtered);
+}
+
+function renderList(list) {
+  const el = document.getElementById('contact-list');
+  if (!list.length) {
+    el.innerHTML = `<p class="text-xs text-slate-600 px-4 py-6 text-center">No contacts found</p>`;
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const active = selectedId === c.contact_id;
+    const isOnCall = activeCallId && activeCallId === c.contact_id;
+    const outcome = c.last_call_outcome;
+    const dot = outcome === 'answered' ? 'bg-emerald-400' : outcome === 'busy' ? 'bg-amber-400' : outcome === 'no_answer' ? 'bg-slate-600' : 'bg-slate-700';
+    return `
+      <button onclick="selectContact('${c.contact_id}')"
+        class="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-slate-800 transition-colors ${active ? 'bg-slate-800 border-r-2 border-sky-500' : ''}">
+        <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+          ${c.name[0].toUpperCase()}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="text-sm font-medium truncate">${c.name}</span>
+            ${isOnCall ? `<span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot shrink-0"></span>` : ''}
+          </div>
+          <div class="text-xs text-slate-500 truncate mt-0.5">
+            ${(c.tags || []).slice(0, 3).join(' · ') || c.phone}
+          </div>
+        </div>
+        <div class="w-2 h-2 rounded-full ${dot} mt-2 shrink-0"></div>
+      </button>
+    `;
+  }).join('');
+}
+
+// ─── Contact detail ───────────────────────────────────────────────────────────
+async function selectContact(id) {
+  selectedId = id;
+  location.hash = id;
+  renderList(contacts.filter(c => !document.getElementById('search').value ||
+    c.name.toLowerCase().includes(document.getElementById('search').value.toLowerCase()) ||
+    (c.tags || []).some(t => t.toLowerCase().includes(document.getElementById('search').value.toLowerCase()))
+  ));
+  // re-render with correct active
+  filterContacts(document.getElementById('search').value);
+
+  const contact = contacts.find(c => c.contact_id === id);
+  if (!contact) return;
+
+  const panel = document.getElementById('main-panel');
+  panel.innerHTML = renderDetailSkeleton(contact);
+
+  // Load memories in background
+  loadMemories(id);
+}
+
+function fmt(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
+  catch { return iso; }
+}
+
+function outcomeColor(o) {
+  return o === 'answered' ? 'text-emerald-400' : o === 'busy' ? 'text-amber-400' : o === 'no_answer' ? 'text-slate-500' : 'text-slate-600';
+}
+
+function renderDetailSkeleton(c) {
+  const tags = (c.tags || []).map(t => `<span class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full">${t}</span>`).join('');
+  const socials = [
+    c.social_handles?.twitter   ? `<a href="https://twitter.com/${c.social_handles.twitter}" target="_blank" class="text-sky-400 hover:underline text-sm">Twitter</a>` : '',
+    c.social_handles?.instagram ? `<a href="https://instagram.com/${c.social_handles.instagram}" target="_blank" class="text-sky-400 hover:underline text-sm">Instagram</a>` : '',
+    c.social_handles?.linkedin  ? `<a href="https://linkedin.com/in/${c.social_handles.linkedin}" target="_blank" class="text-sky-400 hover:underline text-sm">LinkedIn</a>` : '',
+  ].filter(Boolean).join('<span class="text-slate-700">·</span>');
+
+  return `
+  <div class="max-w-3xl mx-auto p-6 space-y-5">
+
+    <!-- Header -->
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-slate-800 flex items-center justify-center text-2xl font-bold text-slate-300">
+          ${c.name[0].toUpperCase()}
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold">${c.name}</h1>
+          <div class="flex items-center gap-2 mt-1 flex-wrap">
+            ${tags || '<span class="text-slate-600 text-xs">No tags</span>'}
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="openEditModal('${c.contact_id}')"
+          class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-sm px-3 py-2 rounded-lg transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
+          Edit
+        </button>
+        <button onclick="openDeleteDialog('${c.contact_id}')"
+          class="flex items-center gap-1.5 bg-slate-800 hover:bg-red-950 hover:text-red-400 text-sm px-3 py-2 rounded-lg transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <!-- Info grid -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">Phone</p>
+        <p class="text-sm font-mono">${c.phone}</p>
+      </div>
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">Contact Method</p>
+        <p class="text-sm">${c.contact_method === 'sip' ? '🌐 SIP' : '📞 Phone'}</p>
+      </div>
+      ${c.sip ? `
+      <div class="col-span-2 bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">SIP URI</p>
+        <p class="text-sm font-mono">${c.sip}</p>
+      </div>` : ''}
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">Timezone</p>
+        <p class="text-sm">${c.timezone}</p>
+      </div>
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">Call Preference</p>
+        <p class="text-sm">${c.call_time_preference === 'none' ? 'Any time' : c.call_time_preference}</p>
+      </div>
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">Last Called</p>
+        <p class="text-sm">${fmt(c.last_called)}</p>
+      </div>
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <p class="text-xs text-slate-500 mb-1">Last Outcome</p>
+        <p class="text-sm ${outcomeColor(c.last_call_outcome)}">${c.last_call_outcome || '—'}</p>
+      </div>
+    </div>
+
+    ${c.last_call_note ? `
+    <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
+      <p class="text-xs text-slate-500 mb-2">Last Call Summary</p>
+      <p class="text-sm text-slate-300 leading-relaxed">${c.last_call_note}</p>
+    </div>` : ''}
+
+    ${socials ? `<div class="flex items-center gap-3">${socials}</div>` : ''}
+
+    <!-- Call section -->
+    <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+        <h2 class="text-sm font-semibold">Live Call</h2>
+        <button id="call-btn" onclick="triggerCall('${c.contact_id}')"
+          class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/>
+          </svg>
+          Call Now
+        </button>
+      </div>
+      <div id="call-live" class="p-4 min-h-[80px] flex items-center justify-center text-slate-600 text-sm">
+        No active call
+      </div>
+    </div>
+
+    <!-- Memories -->
+    <div class="bg-slate-900 rounded-xl border border-slate-800">
+      <div class="px-4 py-3 border-b border-slate-800">
+        <h2 class="text-sm font-semibold">Memory Feed</h2>
+      </div>
+      <div id="memories-list" class="p-4 space-y-2">
+        <p class="text-xs text-slate-600 text-center py-3">Loading memories…</p>
+      </div>
+    </div>
+
+  </div>`;
+}
+
+async function loadMemories(contactId) {
+  try {
+    const memories = await api('GET', `/api/contacts/${contactId}/memories`);
+    const el = document.getElementById('memories-list');
+    if (!el) return;
+    if (!memories.length) {
+      el.innerHTML = `<p class="text-xs text-slate-600 text-center py-3">No memories yet</p>`;
+      return;
+    }
+    const typeColor = { highlight: 'text-amber-400', fact: 'text-sky-400', summary: 'text-emerald-400', social: 'text-purple-400' };
+    el.innerHTML = memories.map(m => `
+      <div class="flex items-start gap-3 py-2 border-b border-slate-800 last:border-0">
+        <span class="text-xs font-medium ${typeColor[m.type] || 'text-slate-500'} mt-0.5 w-16 shrink-0">${m.type}</span>
+        <div class="flex-1">
+          <p class="text-sm text-slate-300">${m.text}</p>
+          <p class="text-xs text-slate-600 mt-0.5">${fmt(m.timestamp)}</p>
+        </div>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+// ─── Live call ────────────────────────────────────────────────────────────────
+async function triggerCall(contactId) {
+  const btn = document.getElementById('call-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+
+  try {
+    const result = await api('POST', `/api/calls/trigger/${contactId}`);
+    if (result && result.status === 'error') {
+      throw new Error(result.detail || 'Call failed to initiate');
+    }
+    activeCallId = contactId;
+    startCallTimer();
+    updateCallUI('connecting', null);
+    subscribeCallSSE(contactId);
+    renderList(contacts.filter(() => true));
+  } catch (e) {
+    updateCallUI('error', e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = callBtnHTML(); }
+  }
+}
+
+function callBtnHTML() {
+  return `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/></svg> Call Now`;
+}
+
+function startCallTimer() {
+  callSeconds = 0;
+  callTimer = setInterval(() => {
+    callSeconds++;
+    const el = document.getElementById('call-timer');
+    if (el) el.textContent = formatDuration(callSeconds);
+  }, 1000);
+}
+
+function stopCallTimer() {
+  if (callTimer) { clearInterval(callTimer); callTimer = null; }
+}
+
+function formatDuration(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function updateCallUI(state, data) {
+  const el = document.getElementById('call-live');
+  if (!el) return;
+
+  if (state === 'connecting') {
+    el.innerHTML = `
+      <div class="w-full">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-2 h-2 rounded-full bg-amber-400 pulse-dot"></span>
+          <span class="text-sm text-amber-300 font-medium">Connecting…</span>
+          <span id="call-timer" class="ml-auto text-xs text-slate-500 font-mono">0:00</span>
+        </div>
+        <div id="call-events" class="space-y-1 text-xs text-slate-500"></div>
+      </div>`;
+  } else if (state === 'in-progress') {
+    el.innerHTML = `
+      <div class="w-full">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+          <span class="text-sm text-emerald-300 font-medium">In progress</span>
+          <span id="call-timer" class="ml-auto text-xs text-slate-500 font-mono">${formatDuration(callSeconds)}</span>
+        </div>
+        <div id="call-events" class="space-y-1 text-xs text-slate-500"></div>
+      </div>`;
+  } else if (state === 'ended') {
+    stopCallTimer();
+    activeCallId = null;
+    const summary = data?.summary;
+    el.innerHTML = `
+      <div class="w-full space-y-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full ${data?.outcome === 'answered' ? 'bg-emerald-400' : 'bg-slate-500'}"></span>
+          <span class="text-sm font-medium">Call ended · <span class="${outcomeColor(data?.outcome)}">${data?.outcome || 'unknown'}</span></span>
+          <span class="ml-auto text-xs text-slate-500 font-mono">${formatDuration(callSeconds)}</span>
+        </div>
+        ${summary ? `<p class="text-sm text-slate-300 bg-slate-800 rounded-lg p-3 leading-relaxed">${summary}</p>` : ''}
+        <button onclick="reloadContact('${selectedId}')" class="text-xs text-sky-400 hover:underline">Reload contact</button>
+      </div>`;
+    const btn = document.getElementById('call-btn');
+    if (btn) { btn.disabled = false; btn.innerHTML = callBtnHTML(); }
+    // Refresh sidebar
+    loadContacts();
+  } else if (state === 'error') {
+    stopCallTimer();
+    el.innerHTML = `<p class="text-sm text-red-400">${data || 'Failed to initiate call'}</p>`;
+  }
+}
+
+function appendCallEvent(text) {
+  const el = document.getElementById('call-events');
+  if (!el) return;
+  const line = document.createElement('p');
+  line.textContent = `${new Date().toLocaleTimeString()} — ${text}`;
+  el.prepend(line);
+}
+
+function subscribeCallSSE(contactId) {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource(`/api/calls/live/${contactId}`);
+
+  sseSource.onmessage = (e) => {
+    const event = JSON.parse(e.data);
+    if (event.type === 'ping') return;
+
+    if (event.type === 'status-update') {
+      const reason = event.ended_reason;
+      if (!reason) {
+        updateCallUI('in-progress', null);
+        appendCallEvent('Call status update received');
+      } else {
+        appendCallEvent(`Status: ${reason}`);
+      }
+    } else if (event.type === 'call-ended') {
+      updateCallUI('ended', event);
+      sseSource.close();
+    }
+  };
+
+  sseSource.onerror = () => {
+    // SSE connection closed normally after call ends, ignore errors
+  };
+}
+
+async function reloadContact(id) {
+  contacts = await api('GET', '/api/contacts');
+  contacts.sort((a, b) => a.name.localeCompare(b.name));
+  selectContact(id);
+}
+
+// ─── Create / Edit modal ──────────────────────────────────────────────────────
+let methodBtns = {};
+const METHOD_ACTIVE = 'bg-sky-600 border-sky-500 text-white';
+const METHOD_INACTIVE = 'bg-slate-800 border-slate-700 text-slate-300';
+
+function setMethod(m) {
+  currentMethod = m;
+  ['phone','sip'].forEach(x => {
+    const btn = document.getElementById(`method-${x}`);
+    btn.className = `flex-1 py-2 text-sm rounded-lg border transition-colors method-btn ${x === m ? METHOD_ACTIVE : METHOD_INACTIVE}`;
+  });
+  document.getElementById('sip-row').style.display = m === 'sip' ? '' : 'none';
+}
+
+document.getElementById('f-pref').addEventListener('change', function() {
+  document.getElementById('time-window-row').style.display = this.value === 'specific_time' ? '' : 'none';
+});
+
+function openModal() {
+  document.getElementById('modal-title').textContent = 'New Contact';
+  document.getElementById('form-submit-label').textContent = 'Create Contact';
+  document.getElementById('form-contact-id').value = '';
+  document.getElementById('contact-form').reset();
+  document.getElementById('form-error').classList.add('hidden');
+  setMethod('phone');
+  document.getElementById('time-window-row').style.display = 'none';
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function openEditModal(contactId) {
+  const c = contacts.find(x => x.contact_id === contactId);
+  if (!c) return;
+
+  document.getElementById('modal-title').textContent = `Edit ${c.name}`;
+  document.getElementById('form-submit-label').textContent = 'Save Changes';
+  document.getElementById('form-contact-id').value = c.contact_id;
+  document.getElementById('f-name').value = c.name;
+  document.getElementById('f-phone').value = c.phone;
+  document.getElementById('f-timezone').value = c.timezone;
+  document.getElementById('f-tags').value = (c.tags || []).join(', ');
+  document.getElementById('f-pref').value = c.call_time_preference || 'none';
+  document.getElementById('f-boost').value = c.priority_boost || 0;
+  document.getElementById('f-twitter').value = c.social_handles?.twitter || '';
+  document.getElementById('f-instagram').value = c.social_handles?.instagram || '';
+  document.getElementById('f-linkedin').value = c.social_handles?.linkedin || '';
+
+  setMethod(c.contact_method || 'phone');
+  document.getElementById('f-sip').value = c.sip || '';
+
+  if (c.preferred_time_window) {
+    document.getElementById('f-tw-start').value = c.preferred_time_window.start || '';
+    document.getElementById('f-tw-end').value = c.preferred_time_window.end || '';
+    document.getElementById('time-window-row').style.display = '';
+    document.getElementById('f-pref').value = 'specific_time';
+  } else {
+    document.getElementById('time-window-row').style.display = 'none';
+  }
+
+  document.getElementById('form-error').classList.add('hidden');
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+}
+
+async function submitContactForm(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('form-error');
+  errEl.classList.add('hidden');
+
+  const id = document.getElementById('form-contact-id').value;
+  const pref = document.getElementById('f-pref').value;
+  const start = document.getElementById('f-tw-start').value;
+  const end = document.getElementById('f-tw-end').value;
+
+  const payload = {
+    name: document.getElementById('f-name').value.trim(),
+    phone: document.getElementById('f-phone').value.trim(),
+    contact_method: currentMethod,
+    sip: document.getElementById('f-sip').value.trim() || null,
+    timezone: document.getElementById('f-timezone').value,
+    tags: document.getElementById('f-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+    call_time_preference: pref,
+    preferred_time_window: pref === 'specific_time' && start && end ? { start, end } : null,
+    priority_boost: parseFloat(document.getElementById('f-boost').value) || 0,
+    social_handles: {
+      twitter: document.getElementById('f-twitter').value.trim() || null,
+      instagram: document.getElementById('f-instagram').value.trim() || null,
+      linkedin: document.getElementById('f-linkedin').value.trim() || null,
+    },
+  };
+
+  const submitBtn = document.getElementById('form-submit-label');
+  const orig = submitBtn.textContent;
+  submitBtn.textContent = 'Saving…';
+
+  try {
+    let result;
+    if (id) {
+      result = await api('PUT', `/api/contacts/${id}`, { ...payload, contact_id: id });
+    } else {
+      result = await api('POST', '/api/contacts', payload);
+    }
+    closeModal();
+    await loadContacts();
+    selectContact(result.contact_id);
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    submitBtn.textContent = orig;
+  }
+}
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+function openDeleteDialog(id) {
+  deleteTargetId = id;
+  document.getElementById('delete-dialog').classList.remove('hidden');
+}
+
+function closeDeleteDialog() {
+  deleteTargetId = null;
+  document.getElementById('delete-dialog').classList.add('hidden');
+}
+
+async function confirmDelete() {
+  if (!deleteTargetId) return;
+  try {
+    await api('DELETE', `/api/contacts/${deleteTargetId}`);
+    closeDeleteDialog();
+    contacts = contacts.filter(c => c.contact_id !== deleteTargetId);
+    selectedId = null;
+    deleteTargetId = null;
+    renderList(contacts);
+    document.getElementById('main-panel').innerHTML = `
+      <div class="h-full flex items-center justify-center text-slate-600">
+        <div class="text-center"><p class="text-sm">Contact deleted</p></div>
+      </div>`;
+    loadContacts();
+  } catch (err) {
+    closeDeleteDialog();
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+setMethod('phone');
+init();
+</script>
+</body>
+</html>

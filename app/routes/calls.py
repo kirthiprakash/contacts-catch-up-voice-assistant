@@ -3,6 +3,7 @@ import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -170,6 +171,26 @@ async def _get_contact(contact_id: str):
 # ---------------------------------------------------------------------------
 # Manual trigger endpoint (task 5)
 # ---------------------------------------------------------------------------
+
+@router.get("/active", summary="Return currently active call contact IDs")
+async def active_calls():
+    from app.services.vapi import _active_calls
+    return {"active": list(_active_calls.keys())}
+
+
+@router.get("/live/{contact_id}", summary="SSE stream of live call events for a contact")
+async def call_live_stream(contact_id: str):
+    """Server-Sent Events stream. Connect before or after triggering a call."""
+    from app.sse_bus import sse_generator
+    return StreamingResponse(
+        sse_generator(contact_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 
 @router.post("/trigger/{contact_id}", summary="Manually trigger an outbound call for a contact")
 async def trigger_call(contact_id: str):

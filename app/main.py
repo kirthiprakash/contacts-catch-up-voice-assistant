@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 
 @asynccontextmanager
@@ -47,6 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(calls.router, prefix="/api/calls", tags=["calls"])
     app.include_router(webhook.router, tags=["webhook"])
     app.include_router(dashboard.router, tags=["dashboard"])
+
+    app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
     @app.get("/health", tags=["health"])
     async def health():

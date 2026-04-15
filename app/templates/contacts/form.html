@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <form method="post" action="/contacts/new">
+    <div class="grid two">
+      <label>
+        Name
+        <input type="text" name="name" required>
+      </label>
+      <label>
+        Phone
+        <input type="text" name="phone" placeholder="+12125550001" required>
+      </label>
+      <label>
+        Timezone
+        <input type="text" name="timezone" placeholder="America/New_York" required>
+      </label>
+      <label>
+        Tags
+        <input type="text" name="tags" placeholder="friend, college">
+      </label>
+      <label>
+        Call Time Preference
+        <select name="call_time_preference">
+          <option value="none">None</option>
+          <option value="morning">Morning</option>
+          <option value="evening">Evening</option>
+          <option value="specific_time">Specific Time</option>
+        </select>
+      </label>
+      <label>
+        Preferred Window Start
+        <input type="text" name="preferred_start" placeholder="18:00">
+      </label>
+      <label>
+        Preferred Window End
+        <input type="text" name="preferred_end" placeholder="21:00">
+      </label>
+      <label>
+        Twitter
+        <input type="text" name="twitter">
+      </label>
+      <label>
+        Instagram
+        <input type="text" name="instagram">
+      </label>
+      <label>
+        LinkedIn
+        <input type="text" name="linkedin">
+      </label>
+    </div>
+    <button class="button primary" type="submit">Create Contact</button>
+  </form>
+</section>
+{% endblock %}

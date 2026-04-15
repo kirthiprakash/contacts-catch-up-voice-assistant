@@ -27,15 +27,15 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - Add JSON serialization/deserialization helpers for `tags`, `preferred_time_window`, `social_handles`
   - _Requirements: 1.1_
 
-  - [ ]* 2.1 Write property test for contact creation round-trip
+  - [x]* 2.1 Write property test for contact creation round-trip
     - **Property 7: Contact creation round-trip**
     - **Validates: Requirements 1.2**
 
-  - [ ]* 2.2 Write property test for invalid phone rejection
+  - [x]* 2.2 Write property test for invalid phone rejection
     - **Property 8: Invalid phone number rejected**
     - **Validates: Requirements 1.4**
 
-  - [ ]* 2.3 Write property test for missing required field rejection
+  - [x]* 2.3 Write property test for missing required field rejection
     - **Property 9: Missing required field rejected**
     - **Validates: Requirements 1.3**
 
@@ -45,7 +45,7 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - Validate E.164 phone format with a regex validator on the `Contact` model (`^\+[1-9]\d{6,14}$`)
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6_
 
-  - [ ]* 3.1 Write property test for contact deletion removes all data
+  - [x]* 3.1 Write property test for contact deletion removes all data
     - **Property 10: Contact deletion removes all associated data**
     - **Validates: Requirements 1.6**
 
@@ -85,27 +85,27 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - `is_in_call_window` converts `now` to the contact's IANA timezone before comparing against `preferred_time_window` or the default 09:00–20:00 window
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-  - [ ]* 8.1 Write property test for scoring formula exactness
+  - [x]* 8.1 Write property test for scoring formula exactness
     - **Property 1: Scoring formula is exact**
     - **Validates: Requirements 2.1**
 
-  - [ ]* 8.2 Write property test for immediate callback override
+  - [x]* 8.2 Write property test for immediate callback override
     - **Property 2: Immediate callback always wins (overrides recency filter)**
     - **Validates: Requirements 2.2**
 
-  - [ ]* 8.3 Write property test for recency filter
+  - [x]* 8.3 Write property test for recency filter
     - **Property 3: Recency filter excludes recently-called contacts**
     - **Validates: Requirements 2.3**
 
-  - [ ]* 8.4 Write property test for category gap score ordering
+  - [x]* 8.4 Write property test for category gap score ordering
     - **Property 4: Category gap score ordering**
     - **Validates: Requirements 2.4**
 
-  - [ ]* 8.5 Write property test for time window filter
+  - [x]* 8.5 Write property test for time window filter
     - **Property 5: Time window filter (including default window)**
     - **Validates: Requirements 2.5, 2.6**
 
-  - [ ]* 8.6 Write property test for result set size bound
+  - [x]* 8.6 Write property test for result set size bound
     - **Property 6: Result set size bounded**
     - **Validates: Requirements 2.7**
 
@@ -129,15 +129,15 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - `search_memory` filters by `contact_id` payload field before returning results
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
 
-  - [ ]* 10.1 Write property test for memory store round-trip with embedding
+  - [x]* 10.1 Write property test for memory store round-trip with embedding
     - **Property 16: Memory store round-trip with embedding**
     - **Validates: Requirements 6.1, 6.2**
 
-  - [ ]* 10.2 Write property test for cross-contact isolation
+  - [x]* 10.2 Write property test for cross-contact isolation
     - **Property 17: Memory search is scoped to contact_id — no cross-contact leakage**
     - **Validates: Requirements 6.4, 4.5**
 
-  - [ ]* 10.3 Write property test for search result count bound
+  - [x]* 10.3 Write property test for search result count bound
     - **Property 18: Search result count bounded by top_k**
     - **Validates: Requirements 6.3**
 
@@ -159,15 +159,15 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - Parse the LLM JSON response into `ExtractionResult`; fall back to empty on parse error
   - _Requirements: 5.3, 5.4, 5.5_
 
-  - [ ]* 12.1 Write property test for LLM extraction schema conformance
+  - [x]* 12.1 Write property test for LLM extraction schema conformance
     - **Property 13: LLM extraction result conforms to schema**
     - **Validates: Requirements 5.3**
 
-  - [ ]* 12.2 Write unit test for LLM retry and fallback behavior
+  - [x]* 12.2 Write unit test for LLM retry and fallback behavior
     - Mock the HTTP client to fail twice, verify empty `ExtractionResult` is returned
     - _Requirements: 5.4, 5.5_
 
-- [ ] 13. Full post-call webhook processing
+- [x] 13. Full post-call webhook processing
   - Expand `app/routes/webhook.py` — replace the stub background task with full `process_call_webhook`:
     1. Classify outcome (rule-based on metadata; LLM fallback if ambiguous)
     2. If answered: call `extract_from_transcript`
@@ -177,22 +177,22 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
     6. Call `mark_call_ended(contact_id)`
   - _Requirements: 5.1, 5.2, 5.3, 5.6, 5.7, 5.8_
 
-  - [ ]* 13.1 Write property test for webhook outcome classification
+  - [x]* 13.1 Write property test for webhook outcome classification
     - **Property 12: Webhook outcome classification always produces a valid value**
     - **Validates: Requirements 5.2**
 
-  - [ ]* 13.2 Write property test for highlights and facts count
+  - [x]* 13.2 Write property test for highlights and facts count
     - **Property 14: Highlights and facts count matches stored memory entries**
     - **Validates: Requirements 5.6**
 
-  - [ ]* 13.3 Write property test for contact fields updated after webhook
+  - [x]* 13.3 Write property test for contact fields updated after webhook
     - **Property 15: Contact fields updated after webhook processing**
     - **Validates: Requirements 5.7**
 
-- [~] 14. Checkpoint — full webhook processing
+- [x] 14. Checkpoint — full webhook processing
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 15. Web dashboard routes and templates
+- [x] 15. Web dashboard routes and templates
   - Create `app/routes/dashboard.py` — HTML routes (separate from `/api/...`):
     - `GET /` → contact list view
     - `GET /contacts/{contact_id}` → contact detail view
@@ -204,14 +204,14 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - Create `app/templates/contacts/form.html` — onboarding form with all required fields
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6_
 
-  - [ ]* 15.1 Write unit tests for dashboard route responses
+  - [x]* 15.1 Write unit tests for dashboard route responses
     - Verify each route returns 200 with expected HTML content (contact name present, form fields present)
     - _Requirements: 9.1, 9.2, 9.3_
 
-- [~] 16. Checkpoint — dashboard complete
+- [x] 16. Checkpoint — dashboard complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 17. Social adapters and fixture ingestion (polish)
+- [x] 17. Social adapters and fixture ingestion (polish)
   - Create `app/services/social/base.py` — `SocialUpdate` model and `SocialAdapterBase` ABC
   - Create `app/services/social/fixtures.py` — `FIXTURES` dict keyed by platform → contact name (lowercased) → list of `SocialUpdate`; include a `__default__` key per platform with generic updates
   - Create `app/services/social/twitter.py`, `instagram.py`, `linkedin.py` — each calls `get_fixture_updates(contact, platform)` from fixtures
@@ -219,17 +219,17 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - The daily cron in `app/workers/scheduler.py` already calls `ingest_social_updates` — no further wiring needed
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-  - [ ]* 17.1 Write property test for social updates stored as type social
+  - [x]* 17.1 Write property test for social updates stored as type social
     - **Property 19: Social updates stored with type "social"**
     - **Validates: Requirements 7.2**
 
-- [~] 18. Calendar service stub (polish)
+- [x] 18. Calendar service stub (polish)
   - Create `app/services/calendar.py` — implement `get_free_slots` and `create_event`
   - If Google Calendar credentials are configured: use the Google Calendar API
   - Otherwise: return mock `TimeSlot` and `CalendarEvent` objects
   - _Requirements: 8.1, 8.2, 8.3_
 
-  - [ ]* 18.1 Write unit test for calendar stub mock mode
+  - [x]* 18.1 Write unit test for calendar stub mock mode
     - Verify `get_free_slots` returns a non-empty list and `create_event` returns a valid `CalendarEvent` when credentials are absent
     - _Requirements: 8.3_
 

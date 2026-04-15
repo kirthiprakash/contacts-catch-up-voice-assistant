@@ -5,9 +5,11 @@ from fastapi import FastAPI
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    from app.db import init_db
     from app.services.qdrant import ensure_collection_exists
     from app.workers.scheduler import start_scheduler
 
+    await init_db()
     await ensure_collection_exists()
     start_scheduler()
 

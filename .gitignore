@@ -8,3 +8,6 @@ __pycache__/
 
 # Env
 .env
+
+# sqllite db files
+*.db

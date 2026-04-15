@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title or "Contacts Catch-Up Voice Assistant" }}</title>
+  <style>
+    :root {
+      --bg: #f4f1e8;
+      --panel: #fffdf7;
+      --ink: #1f2a2b;
+      --muted: #5f6c6d;
+      --accent: #b85c38;
+      --line: #d9d1c4;
+      --tag: #e7ddcf;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(184, 92, 56, 0.12), transparent 32%),
+        linear-gradient(180deg, #f8f4ec, var(--bg));
+    }
+    header, main {
+      width: min(1100px, calc(100% - 2rem));
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 0;
+    }
+    nav a, .button {
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 0.65rem 0.9rem;
+      background: var(--panel);
+      border-radius: 999px;
+      margin-left: 0.5rem;
+    }
+    .button.primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .panel {
+      background: rgba(255, 253, 247, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 1.25rem;
+      box-shadow: 0 14px 32px rgba(31, 42, 43, 0.06);
+    }
+    .grid {
+      display: grid;
+      gap: 1rem;
+    }
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .tag {
+      display: inline-block;
+      background: var(--tag);
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      margin-right: 0.35rem;
+      margin-bottom: 0.35rem;
+      font-size: 0.9rem;
+    }
+    .muted { color: var(--muted); }
+    form.inline { display: inline; }
+    label { display: block; margin-bottom: 0.85rem; }
+    input, select, textarea {
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.7rem 0.75rem;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: white;
+      font: inherit;
+    }
+    ul.clean {
+      padding-left: 1.1rem;
+      margin: 0;
+    }
+    @media (max-width: 640px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      nav a, .button { margin-left: 0; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="muted">Contacts Catch-Up Voice Assistant</div>
+      <h1 style="margin: 0.2rem 0 0;">{{ page_title or "Dashboard" }}</h1>
+    </div>
+    <nav>
+      <a href="/">Contacts</a>
+      <a href="/contacts/new">Add Contact</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

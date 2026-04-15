@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Tags</th>
+        <th>Last Called</th>
+        <th>Next Call</th>
+        <th>Last Outcome</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for contact in contacts %}
+      <tr>
+        <td><a href="/contacts/{{ contact.contact_id }}">{{ contact.name }}</a></td>
+        <td>
+          {% for tag in contact.tags %}
+          <span class="tag">{{ tag }}</span>
+          {% endfor %}
+        </td>
+        <td class="muted">{{ contact.last_called or "Never" }}</td>
+        <td class="muted">{{ contact.next_call_at or "Not scheduled" }}</td>
+        <td class="muted">{{ contact.last_call_outcome or "Unknown" }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="muted">No contacts yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

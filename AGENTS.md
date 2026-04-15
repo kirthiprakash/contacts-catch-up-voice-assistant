@@ -116,6 +116,10 @@ score = days_since_last_spoken * 0.6 + category_gap_score * 0.3 + priority_boost
 `days_since_last_spoken` is unbounded — this is a known POC limitation. In practice it dominates the other two terms for contacts not spoken to in many days. Do not attempt to normalise it for the hackathon; it produces correct relative rankings for a small contact list.
 
 ---
+## Install dependencies
+Activate the venv with command `source .venv/bin/activate`
+Use command `uv sync` to install application dependencies
+Use command `uv sync --extra dev` to install dev dependencies
 
 ## Testing
 

@@ -241,11 +241,13 @@ async def process_call_webhook(payload: VapiWebhookPayload) -> None:
     # --- Step 2: Extract from transcript if answered ---
     summary = ""
     callback = None
+    call_time_preference = "none"
 
     if outcome == "answered" and payload.transcript:
         extraction = await extract_from_transcript(payload.transcript)
         summary = extraction.summary
         callback = extraction.callback
+        call_time_preference = extraction.call_time_preference
 
         # --- Step 3: Store highlights and facts as memory entries ---
         if contact_id:
@@ -290,15 +292,24 @@ async def process_call_webhook(payload: VapiWebhookPayload) -> None:
                             last_spoken = ?,
                             last_call_outcome = ?,
                             last_call_note = ?,
+                            call_time_preference = ?,
                             call_started_at = NULL
                         WHERE contact_id = ?""",
-                        (now_iso, now_iso, outcome, summary or None, contact_id),
+                        (
+                            now_iso,
+                            now_iso,
+                            outcome,
+                            summary or None,
+                            call_time_preference,
+                            contact_id,
+                        ),
                     )
                 else:
                     await db.execute(
                         """UPDATE contacts SET
                             last_called = ?,
                             last_call_outcome = ?,
+                            last_call_note = NULL,
                             call_started_at = NULL
                         WHERE contact_id = ?""",
                         (now_iso, outcome, contact_id),
@@ -315,6 +326,15 @@ async def process_call_webhook(payload: VapiWebhookPayload) -> None:
             run_at = parse_callback_run_at(callback.type, callback.value)
             if run_at is not None:
                 try:
+                    db = await get_db()
+                    try:
+                        await db.execute(
+                            "UPDATE contacts SET next_call_at = ? WHERE contact_id = ?",
+                            (run_at.isoformat(), contact_id),
+                        )
+                        await db.commit()
+                    finally:
+                        await db.close()
                     schedule_one_off_call(contact_id, run_at)
                     logger.info(
                         "Scheduled callback for contact %s at %s (type=%s value=%s)",
@@ -325,6 +345,19 @@ async def process_call_webhook(payload: VapiWebhookPayload) -> None:
                     )
                 except Exception as exc:
                     logger.error("Failed to schedule callback for contact %s: %s", contact_id, exc)
+        else:
+            try:
+                db = await get_db()
+                try:
+                    await db.execute(
+                        "UPDATE contacts SET next_call_at = NULL WHERE contact_id = ?",
+                        (contact_id,),
+                    )
+                    await db.commit()
+                finally:
+                    await db.close()
+            except Exception as exc:
+                logger.error("Failed to clear next_call_at for contact %s: %s", contact_id, exc)
 
     # --- Step 6: Release active-call guard ---
     if contact_id:

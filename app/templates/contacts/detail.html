@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="grid two">
+  <article class="panel">
+    <h2 style="margin-top: 0;">{{ contact.name }}</h2>
+    <p class="muted">{{ contact.phone }} · {{ contact.timezone }}</p>
+    <p>
+      {% for tag in contact.tags %}
+      <span class="tag">{{ tag }}</span>
+      {% endfor %}
+    </p>
+    <p>{{ contact.last_call_note or "No call summary yet." }}</p>
+    <form class="inline" method="post" action="/contacts/{{ contact.contact_id }}/call">
+      <button class="button primary" type="submit">Trigger Call</button>
+    </form>
+  </article>
+
+  <article class="panel">
+    <h3 style="margin-top: 0;">Timeline</h3>
+    <ul class="clean">
+      {% for item in timeline %}
+      <li>
+        <strong>{{ item.label }}</strong>: {{ item.timestamp }}
+        {% if item.detail %}
+        <span class="muted"> · {{ item.detail }}</span>
+        {% endif %}
+      </li>
+      {% else %}
+      <li class="muted">No call history yet.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="panel">
+    <h3 style="margin-top: 0;">Highlights</h3>
+    <ul class="clean">
+      {% for entry in highlights %}
+      <li>{{ entry.text }}</li>
+      {% else %}
+      <li class="muted">No highlights saved.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="panel">
+    <h3 style="margin-top: 0;">Facts</h3>
+    <ul class="clean">
+      {% for entry in facts %}
+      <li>{{ entry.text }}</li>
+      {% else %}
+      <li class="muted">No facts saved.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="panel">
+    <h3 style="margin-top: 0;">Social Updates</h3>
+    <ul class="clean">
+      {% for entry in social_updates %}
+      <li>{{ entry.text }}</li>
+      {% else %}
+      <li class="muted">No social updates ingested.</li>
+      {% endfor %}
+    </ul>
+  </article>
+</section>
+{% endblock %}

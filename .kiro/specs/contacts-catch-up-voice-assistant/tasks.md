@@ -198,6 +198,7 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
     - `GET /contacts/{contact_id}` → contact detail view
     - `GET /contacts/new` → onboarding form
     - `POST /contacts/{contact_id}/call` → manual trigger (calls `initiate_call`, redirects back to detail view)
+    - `POST /contacts/{contact_id}/delete` → contact delete action from dashboard (deletes memories + contact, redirects to list)
   - Create `app/templates/base.html` — base layout with nav
   - Create `app/templates/contacts/list.html` — table: name, tags, last called, next call, last outcome
   - Create `app/templates/contacts/detail.html` — highlights, facts, notes, call timeline, manual trigger button
@@ -207,6 +208,15 @@ Incremental implementation ordered to get a real end-to-end outbound call workin
   - [x]* 15.1 Write unit tests for dashboard route responses
     - Verify each route returns 200 with expected HTML content (contact name present, form fields present)
     - _Requirements: 9.1, 9.2, 9.3_
+
+  - [x]* 15.2 Add dashboard delete action for contacts
+    - Add UI delete button and HTML route to delete contact + memories from the dashboard
+    - _Requirements: 1.6, 9.1_
+
+  - [x]* 15.3 Add dashboard edit flow and SIP contact method support
+    - Add edit button/routes to update contacts from dashboard
+    - Add `contact_method` + `sip` fields to create/edit UI forms
+    - _Requirements: 4.1, 9.1, 9.3_
 
 - [x] 16. Checkpoint — dashboard complete
   - Ensure all tests pass, ask the user if questions arise.

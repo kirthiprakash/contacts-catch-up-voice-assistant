@@ -10,6 +10,7 @@
         <th>Last Called</th>
         <th>Next Call</th>
         <th>Last Outcome</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -24,10 +25,11 @@
         <td class="muted">{{ contact.last_called or "Never" }}</td>
         <td class="muted">{{ contact.next_call_at or "Not scheduled" }}</td>
         <td class="muted">{{ contact.last_call_outcome or "Unknown" }}</td>
+        <td><a class="button" href="/contacts/{{ contact.contact_id }}/edit">Edit</a></td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="5" class="muted">No contacts yet.</td>
+        <td colspan="6" class="muted">No contacts yet.</td>
       </tr>
       {% endfor %}
     </tbody>

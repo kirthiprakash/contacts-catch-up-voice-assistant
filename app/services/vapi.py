@@ -8,6 +8,7 @@ The polling loop calls sweep_stale_active_calls() to release entries older than
 
 import logging
 from datetime import datetime, UTC
+from uuid import UUID
 
 import httpx
 
@@ -37,6 +38,14 @@ class VapiCallResponse:
         self.raw = raw
 
 
+def _is_valid_uuid(value: str) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 async def initiate_call(contact: Contact) -> VapiCallResponse:
     """
     Calls POST /call on the Vapi API.
@@ -54,6 +63,14 @@ async def initiate_call(contact: Contact) -> VapiCallResponse:
         )
 
     settings = get_settings()
+
+    if contact.contact_method != "sip" and not _is_valid_uuid(settings.VAPI_PHONE_NUMBER_ID):
+        logger.error(
+            "Invalid VAPI_PHONE_NUMBER_ID configured: '%s'. Expected UUID.",
+            settings.VAPI_PHONE_NUMBER_ID,
+        )
+        await _set_no_answer(contact)
+        return None  # type: ignore[return-value]
 
     # Build the Vapi payload based on contact method
     if contact.contact_method == "sip":

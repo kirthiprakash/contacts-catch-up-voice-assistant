@@ -2,55 +2,66 @@
 
 {% block content %}
 <section class="panel">
-  <form method="post" action="/contacts/new">
+  <form method="post" action="{{ form_action or '/contacts/new' }}">
     <div class="grid two">
       <label>
         Name
-        <input type="text" name="name" required>
+        <input type="text" name="name" value="{{ contact.name if contact else '' }}" required>
       </label>
       <label>
         Phone
-        <input type="text" name="phone" placeholder="+12125550001" required>
+        <input type="text" name="phone" placeholder="+12125550001" value="{{ contact.phone if contact else '' }}" required>
+      </label>
+      <label>
+        Contact Method
+        <select name="contact_method">
+          <option value="phone" {% if not contact or contact.contact_method == 'phone' %}selected{% endif %}>Phone (PSTN)</option>
+          <option value="sip" {% if contact and contact.contact_method == 'sip' %}selected{% endif %}>SIP</option>
+        </select>
+      </label>
+      <label>
+        SIP URI
+        <input type="text" name="sip" placeholder="sip:alice@example.com" value="{{ contact.sip if contact and contact.sip else '' }}">
       </label>
       <label>
         Timezone
-        <input type="text" name="timezone" placeholder="America/New_York" required>
+        <input type="text" name="timezone" placeholder="America/New_York" value="{{ contact.timezone if contact else '' }}" required>
       </label>
       <label>
         Tags
-        <input type="text" name="tags" placeholder="friend, college">
+        <input type="text" name="tags" placeholder="friend, college" value="{{ ', '.join(contact.tags) if contact else '' }}">
       </label>
       <label>
         Call Time Preference
         <select name="call_time_preference">
-          <option value="none">None</option>
-          <option value="morning">Morning</option>
-          <option value="evening">Evening</option>
-          <option value="specific_time">Specific Time</option>
+          <option value="none" {% if not contact or contact.call_time_preference == 'none' %}selected{% endif %}>None</option>
+          <option value="morning" {% if contact and contact.call_time_preference == 'morning' %}selected{% endif %}>Morning</option>
+          <option value="evening" {% if contact and contact.call_time_preference == 'evening' %}selected{% endif %}>Evening</option>
+          <option value="specific_time" {% if contact and contact.call_time_preference == 'specific_time' %}selected{% endif %}>Specific Time</option>
         </select>
       </label>
       <label>
         Preferred Window Start
-        <input type="text" name="preferred_start" placeholder="18:00">
+        <input type="text" name="preferred_start" placeholder="18:00" value="{{ contact.preferred_time_window.start if contact and contact.preferred_time_window else '' }}">
       </label>
       <label>
         Preferred Window End
-        <input type="text" name="preferred_end" placeholder="21:00">
+        <input type="text" name="preferred_end" placeholder="21:00" value="{{ contact.preferred_time_window.end if contact and contact.preferred_time_window else '' }}">
       </label>
       <label>
         Twitter
-        <input type="text" name="twitter">
+        <input type="text" name="twitter" value="{{ contact.social_handles.twitter if contact and contact.social_handles and contact.social_handles.twitter else '' }}">
       </label>
       <label>
         Instagram
-        <input type="text" name="instagram">
+        <input type="text" name="instagram" value="{{ contact.social_handles.instagram if contact and contact.social_handles and contact.social_handles.instagram else '' }}">
       </label>
       <label>
         LinkedIn
-        <input type="text" name="linkedin">
+        <input type="text" name="linkedin" value="{{ contact.social_handles.linkedin if contact and contact.social_handles and contact.social_handles.linkedin else '' }}">
       </label>
     </div>
-    <button class="button primary" type="submit">Create Contact</button>
+    <button class="button primary" type="submit">{{ submit_label or "Create Contact" }}</button>
   </form>
 </section>
 {% endblock %}

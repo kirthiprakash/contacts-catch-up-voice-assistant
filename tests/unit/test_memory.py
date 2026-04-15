@@ -11,6 +11,7 @@ Feature: contacts-catch-up-voice-assistant
 import os
 import pytest
 import unittest.mock as mock_lib
+import httpx
 from datetime import datetime, UTC
 from uuid import uuid4
 
@@ -31,6 +32,7 @@ os.environ.setdefault("OPENAI_MODEL", "gpt-4o")
 
 import app.services.qdrant as qdrant_module
 import app.services.embedding as embedding_module
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -351,6 +353,7 @@ async def test_ensure_collection_creates_if_missing():
     mock_client = mock_lib.AsyncMock()
     mock_client.get_collections.return_value = mock_lib.MagicMock(collections=[])
     mock_client.create_collection = mock_lib.AsyncMock()
+    mock_client.create_payload_index = mock_lib.AsyncMock()
 
     with mock_lib.patch.object(qdrant_module, "_get_client", return_value=mock_client):
         await qdrant_module.ensure_collection_exists()
@@ -360,6 +363,7 @@ async def test_ensure_collection_creates_if_missing():
     assert call_kwargs.kwargs["collection_name"] == "memories"
     vectors_config = call_kwargs.kwargs["vectors_config"]
     assert vectors_config.size == 768
+    mock_client.create_payload_index.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -370,11 +374,13 @@ async def test_ensure_collection_skips_if_exists():
     mock_client = mock_lib.AsyncMock()
     mock_client.get_collections.return_value = mock_lib.MagicMock(collections=[existing])
     mock_client.create_collection = mock_lib.AsyncMock()
+    mock_client.create_payload_index = mock_lib.AsyncMock()
 
     with mock_lib.patch.object(qdrant_module, "_get_client", return_value=mock_client):
         await qdrant_module.ensure_collection_exists()
 
     mock_client.create_collection.assert_not_called()
+    mock_client.create_payload_index.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -404,3 +410,52 @@ async def test_delete_contact_memories_calls_delete_with_filter():
     assert entry2.entry_id not in store.points
     # The other contact's entry should remain
     assert other_entry.entry_id in store.points
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_memories_fallback_without_index():
+    """Fallback path: if filtered delete returns 400, it scrolls and deletes by IDs."""
+    mock_client = mock_lib.AsyncMock()
+    bad_request = UnexpectedResponse(
+        status_code=400,
+        reason_phrase="Bad Request",
+        content=b'{"status":{"error":"Index required"}}',
+        headers=httpx.Headers({}),
+    )
+    mock_client.delete = mock_lib.AsyncMock(side_effect=[bad_request, None])
+    mock_client.scroll = mock_lib.AsyncMock(
+        side_effect=[
+            ([mock_lib.MagicMock(id="id-1"), mock_lib.MagicMock(id="id-2")], None),
+        ]
+    )
+
+    with mock_lib.patch.object(qdrant_module, "_get_client", return_value=mock_client):
+        await qdrant_module.delete_contact_memories("contact-123")
+
+    assert mock_client.delete.await_count == 2
+    mock_client.scroll.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_search_memory_uses_query_points_when_available():
+    """search_memory should support modern qdrant-client query_points API."""
+    mock_client = mock_lib.AsyncMock()
+    point = mock_lib.MagicMock()
+    point.id = "p1"
+    point.payload = {
+        "contact_id": "contact-1",
+        "type": "highlight",
+        "text": "Test memory",
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    mock_client.query_points = mock_lib.AsyncMock(
+        return_value=mock_lib.MagicMock(points=[point])
+    )
+
+    with mock_lib.patch.object(qdrant_module, "_get_client", return_value=mock_client):
+        with mock_lib.patch.object(embedding_module, "embed", return_value=make_fake_vector(seed=7)):
+            entries = await qdrant_module.search_memory("contact-1", "query", top_k=3)
+
+    assert len(entries) == 1
+    assert entries[0].contact_id == "contact-1"
+    assert entries[0].text == "Test memory"

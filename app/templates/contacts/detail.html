@@ -4,6 +4,13 @@
 <section class="grid two">
   <article class="panel">
     <h2 style="margin-top: 0;">{{ contact.name }}</h2>
+    {% if status == "initiated" %}
+    <p class="muted">Call initiated.</p>
+    {% elif status == "failed" %}
+    <p class="muted">Call failed to start. Check Vapi configuration and logs.</p>
+    {% elif status == "already_on_call" %}
+    <p class="muted">Contact is already on an active call.</p>
+    {% endif %}
     <p class="muted">{{ contact.phone }} · {{ contact.timezone }}</p>
     <p>
       {% for tag in contact.tags %}
@@ -13,6 +20,10 @@
     <p>{{ contact.last_call_note or "No call summary yet." }}</p>
     <form class="inline" method="post" action="/contacts/{{ contact.contact_id }}/call">
       <button class="button primary" type="submit">Trigger Call</button>
+    </form>
+    <a class="button" href="/contacts/{{ contact.contact_id }}/edit">Edit Contact</a>
+    <form class="inline" method="post" action="/contacts/{{ contact.contact_id }}/delete">
+      <button class="button danger" type="submit">Delete Contact</button>
     </form>
   </article>
 

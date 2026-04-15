@@ -11,10 +11,21 @@ Tests cover:
 - All endpoints return 404 if contact not found
 """
 
+import os
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 from datetime import datetime, UTC
+
+# Required settings for calendar/config access in tool endpoints.
+os.environ.setdefault("VAPI_API_KEY", "test-key")
+os.environ.setdefault("VAPI_ASSISTANT_ID", "asst-123")
+os.environ.setdefault("VAPI_PHONE_NUMBER_ID", "pn-456")
+os.environ.setdefault("QDRANT_API_KEY", "qd-key")
+os.environ.setdefault("QDRANT_ENDPOINT", "https://qdrant.example.com")
+os.environ.setdefault("OPENAI_API_KEY", "oai-key")
+os.environ.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
+os.environ.setdefault("OPENAI_MODEL", "gpt-4o")
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +141,20 @@ def test_get_contact_context_returns_name_note_tags(client_with_contact):
     assert "tech" in data["tags"]
 
 
+def test_get_contact_context_response_contract(client_with_contact):
+    """Contract test for Vapi tool response properties."""
+    client, _ = client_with_contact
+    response = client.post("/api/calls/tools/get_contact_context", json={"contact_id": CONTACT_ID})
+    assert response.status_code == 200
+    data = response.json()
+
+    # Response properties expected by the tool schema in Vapi
+    assert set(data.keys()) == {"name", "last_interaction_summary", "tags"}
+    assert isinstance(data["name"], str)
+    assert isinstance(data["tags"], list)
+    assert data["last_interaction_summary"] is None or isinstance(data["last_interaction_summary"], str)
+
+
 def test_get_contact_context_404_if_not_found(client_no_contact):
     response = client_no_contact.post("/api/calls/tools/get_contact_context", json={"contact_id": "nonexistent"})
     assert response.status_code == 404
@@ -139,6 +164,29 @@ def test_get_contact_context_400_if_no_contact_id(client_with_contact):
     client, _ = client_with_contact
     response = client.post("/api/calls/tools/get_contact_context", json={})
     assert response.status_code == 400
+
+
+def test_get_contact_context_accepts_nested_vapi_toolcall_payload(client_with_contact):
+    client, _ = client_with_contact
+    response = client.post(
+        "/api/calls/tools/get_contact_context",
+        json={
+            "message": {
+                "toolCallList": [
+                    {
+                        "function": {
+                            "arguments": {
+                                "contact_id": CONTACT_ID,
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Alice"
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +229,36 @@ def test_get_memory_400_if_no_contact_id(client_with_contact):
     assert response.status_code == 400
 
 
+def test_get_memory_returns_degraded_when_backend_unavailable(client_with_contact):
+    client, _ = client_with_contact
+    with patch("app.services.qdrant.search_memory", new_callable=AsyncMock, side_effect=RuntimeError("connect failed")):
+        response = client.post("/api/calls/tools/get_memory", json={"contact_id": CONTACT_ID})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["memories"] == []
+
+
+def test_get_memory_accepts_nested_vapi_toolcall_payload(client_with_contact):
+    client, _ = client_with_contact
+    with patch("app.services.qdrant.search_memory", new_callable=AsyncMock, return_value=[]):
+        response = client.post(
+            "/api/calls/tools/get_memory",
+            json={
+                "message": {
+                    "toolCallList": [
+                        {
+                            "function": {
+                                "arguments": "{\"contact_id\": \"contact-test-001\"}"
+                            }
+                        }
+                    ]
+                }
+            },
+        )
+    assert response.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # search_memory
 # ---------------------------------------------------------------------------
@@ -221,6 +299,19 @@ def test_search_memory_400_if_no_query(client_with_contact):
     assert response.status_code == 400
 
 
+def test_search_memory_returns_degraded_when_backend_unavailable(client_with_contact):
+    client, _ = client_with_contact
+    with patch("app.services.qdrant.search_memory", new_callable=AsyncMock, side_effect=RuntimeError("connect failed")):
+        response = client.post(
+            "/api/calls/tools/search_memory",
+            json={"contact_id": CONTACT_ID, "query": "latest"},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["memories"] == []
+
+
 # ---------------------------------------------------------------------------
 # save_memory
 # ---------------------------------------------------------------------------
@@ -257,6 +348,18 @@ def test_save_memory_400_if_no_text(client_with_contact):
     client, _ = client_with_contact
     response = client.post("/api/calls/tools/save_memory", json={"contact_id": CONTACT_ID})
     assert response.status_code == 400
+
+
+def test_save_memory_returns_degraded_when_backend_unavailable(client_with_contact):
+    client, _ = client_with_contact
+    with patch("app.services.qdrant.store_memory", new_callable=AsyncMock, side_effect=RuntimeError("connect failed")):
+        response = client.post(
+            "/api/calls/tools/save_memory",
+            json={"contact_id": CONTACT_ID, "text": "remember this"},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
 
 
 # ---------------------------------------------------------------------------

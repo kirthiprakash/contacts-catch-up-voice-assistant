@@ -58,6 +58,9 @@ async def new_contact_form(request: Request):
         context={
             "request": request,
             "page_title": "New Contact",
+            "contact": None,
+            "form_action": "/contacts/new",
+            "submit_label": "Create Contact",
         },
     )
 
@@ -67,6 +70,8 @@ async def create_contact_from_form(
     request: Request,
     name: str = Form(...),
     phone: str = Form(...),
+    contact_method: str = Form("phone"),
+    sip: str = Form(""),
     timezone: str = Form(...),
     tags: str = Form(""),
     call_time_preference: str = Form("none"),
@@ -80,9 +85,14 @@ async def create_contact_from_form(
     if preferred_start and preferred_end:
         preferred_time_window = TimeWindow(start=preferred_start, end=preferred_end)
 
+    if contact_method == "sip" and not sip:
+        raise HTTPException(status_code=400, detail="sip is required when contact_method is 'sip'")
+
     contact = Contact(
         name=name,
         phone=phone,
+        contact_method=contact_method,  # type: ignore[arg-type]
+        sip=sip or None,
         timezone=timezone,
         tags=[tag.strip() for tag in tags.split(",") if tag.strip()],
         call_time_preference=call_time_preference,
@@ -120,6 +130,96 @@ async def create_contact_from_form(
         url=f"/contacts/{contact.contact_id}",
         status_code=303,
     )
+
+
+@router.get("/contacts/{contact_id}/edit")
+async def edit_contact_form(request: Request, contact_id: str):
+    contact = await _fetch_contact(contact_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="contacts/form.html",
+        context={
+            "request": request,
+            "page_title": f"Edit {contact.name}",
+            "contact": contact,
+            "form_action": f"/contacts/{contact_id}/edit",
+            "submit_label": "Update Contact",
+        },
+    )
+
+
+@router.post("/contacts/{contact_id}/edit")
+async def edit_contact_from_form(
+    contact_id: str,
+    name: str = Form(...),
+    phone: str = Form(...),
+    contact_method: str = Form("phone"),
+    sip: str = Form(""),
+    timezone: str = Form(...),
+    tags: str = Form(""),
+    call_time_preference: str = Form("none"),
+    preferred_start: str = Form(""),
+    preferred_end: str = Form(""),
+    twitter: str = Form(""),
+    instagram: str = Form(""),
+    linkedin: str = Form(""),
+):
+    existing = await _fetch_contact(contact_id)
+
+    preferred_time_window = None
+    if preferred_start and preferred_end:
+        preferred_time_window = TimeWindow(start=preferred_start, end=preferred_end)
+
+    if contact_method == "sip" and not sip:
+        raise HTTPException(status_code=400, detail="sip is required when contact_method is 'sip'")
+
+    updated = Contact(
+        contact_id=existing.contact_id,
+        name=name,
+        phone=phone,
+        sip=sip or None,
+        contact_method=contact_method,  # type: ignore[arg-type]
+        tags=[tag.strip() for tag in tags.split(",") if tag.strip()],
+        timezone=timezone,
+        last_called=existing.last_called,
+        last_spoken=existing.last_spoken,
+        call_time_preference=call_time_preference,  # type: ignore[arg-type]
+        preferred_time_window=preferred_time_window,
+        next_call_at=existing.next_call_at,
+        priority_boost=existing.priority_boost,
+        last_call_outcome=existing.last_call_outcome,
+        last_call_note=existing.last_call_note,
+        call_started_at=existing.call_started_at,
+        social_handles=SocialHandles(
+            twitter=twitter or None,
+            instagram=instagram or None,
+            linkedin=linkedin or None,
+        ),
+    )
+
+    db = await get_db()
+    try:
+        await db.execute(
+            """
+            UPDATE contacts SET
+                name = :name,
+                phone = :phone,
+                sip = :sip,
+                contact_method = :contact_method,
+                tags = :tags,
+                timezone = :timezone,
+                call_time_preference = :call_time_preference,
+                preferred_time_window = :preferred_time_window,
+                social_handles = :social_handles
+            WHERE contact_id = :contact_id
+            """,
+            contact_to_row(updated),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+    return RedirectResponse(url=f"/contacts/{contact_id}?status=updated", status_code=303)
 
 
 @router.get("/contacts/{contact_id}")
@@ -173,6 +273,7 @@ async def contact_detail(request: Request, contact_id: str):
             "facts": facts,
             "social_updates": social_updates,
             "timeline": timeline,
+            "status": request.query_params.get("status"),
             "page_title": contact.name,
         },
     )
@@ -183,9 +284,12 @@ async def manual_call_trigger(contact_id: str):
     contact = await _fetch_contact(contact_id)
 
     try:
-        await initiate_call(contact)
+        result = await initiate_call(contact)
     except AlreadyOnCallError:
         return RedirectResponse(url=f"/contacts/{contact_id}?status=already_on_call", status_code=303)
+
+    if result is None:
+        return RedirectResponse(url=f"/contacts/{contact_id}?status=failed", status_code=303)
 
     db = await get_db()
     try:
@@ -198,3 +302,29 @@ async def manual_call_trigger(contact_id: str):
         await db.close()
 
     return RedirectResponse(url=f"/contacts/{contact_id}?status=initiated", status_code=303)
+
+
+@router.post("/contacts/{contact_id}/delete")
+async def manual_contact_delete(contact_id: str):
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT contact_id FROM contacts WHERE contact_id = ?",
+            (contact_id,),
+        )
+        existing = await cursor.fetchone()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        from app.services.qdrant import delete_contact_memories
+
+        await delete_contact_memories(contact_id)
+        await db.execute(
+            "DELETE FROM contacts WHERE contact_id = ?",
+            (contact_id,),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+    return RedirectResponse(url="/?status=deleted", status_code=303)

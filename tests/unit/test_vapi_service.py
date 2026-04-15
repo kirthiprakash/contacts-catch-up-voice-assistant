@@ -113,14 +113,14 @@ async def test_property_11_phone_contact_uses_pstn(contact: Contact):
         )
 
         import os
-        os.environ.setdefault("VAPI_API_KEY", "test-key")
-        os.environ.setdefault("VAPI_ASSISTANT_ID", "asst-123")
-        os.environ.setdefault("VAPI_PHONE_NUMBER_ID", "pn-456")
-        os.environ.setdefault("QDRANT_API_KEY", "qd-key")
-        os.environ.setdefault("QDRANT_ENDPOINT", "https://qdrant.example.com")
-        os.environ.setdefault("OPENAI_API_KEY", "oai-key")
-        os.environ.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        os.environ.setdefault("OPENAI_MODEL", "gpt-4o")
+        os.environ["VAPI_API_KEY"] = "test-key"
+        os.environ["VAPI_ASSISTANT_ID"] = "asst-123"
+        os.environ["VAPI_PHONE_NUMBER_ID"] = "123e4567-e89b-12d3-a456-426614174000"
+        os.environ["QDRANT_API_KEY"] = "qd-key"
+        os.environ["QDRANT_ENDPOINT"] = "https://qdrant.example.com"
+        os.environ["OPENAI_API_KEY"] = "oai-key"
+        os.environ["OPENAI_BASE_URL"] = "https://api.openai.com/v1"
+        os.environ["OPENAI_MODEL"] = "gpt-4o"
 
         # Patch DB calls so we don't need a real DB
         import unittest.mock as mock_lib
@@ -166,14 +166,14 @@ async def test_property_11_sip_contact_uses_sip_uri(contact: Contact):
         )
 
         import os
-        os.environ.setdefault("VAPI_API_KEY", "test-key")
-        os.environ.setdefault("VAPI_ASSISTANT_ID", "asst-123")
-        os.environ.setdefault("VAPI_PHONE_NUMBER_ID", "pn-456")
-        os.environ.setdefault("QDRANT_API_KEY", "qd-key")
-        os.environ.setdefault("QDRANT_ENDPOINT", "https://qdrant.example.com")
-        os.environ.setdefault("OPENAI_API_KEY", "oai-key")
-        os.environ.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        os.environ.setdefault("OPENAI_MODEL", "gpt-4o")
+        os.environ["VAPI_API_KEY"] = "test-key"
+        os.environ["VAPI_ASSISTANT_ID"] = "asst-123"
+        os.environ["VAPI_PHONE_NUMBER_ID"] = "123e4567-e89b-12d3-a456-426614174000"
+        os.environ["QDRANT_API_KEY"] = "qd-key"
+        os.environ["QDRANT_ENDPOINT"] = "https://qdrant.example.com"
+        os.environ["OPENAI_API_KEY"] = "oai-key"
+        os.environ["OPENAI_BASE_URL"] = "https://api.openai.com/v1"
+        os.environ["OPENAI_MODEL"] = "gpt-4o"
 
         import unittest.mock as mock_lib
         with mock_lib.patch("app.db.get_db") as mock_get_db:
@@ -259,20 +259,46 @@ def test_sweep_stale_active_calls_keeps_recent_entries():
 
 
 @pytest.mark.asyncio
+async def test_invalid_phone_number_id_skips_vapi_call_and_sets_no_answer():
+    """If VAPI_PHONE_NUMBER_ID is not a UUID, initiate_call returns None without API call."""
+    contact = make_phone_contact()
+    vapi_module._active_calls.pop(contact.contact_id, None)
+
+    import unittest.mock as mock_lib
+    with (
+        mock_lib.patch("app.config.get_settings") as mock_settings,
+        mock_lib.patch("app.services.vapi._set_no_answer", new_callable=mock_lib.AsyncMock) as mock_set_no_answer,
+        respx.mock(base_url="https://api.vapi.ai", assert_all_called=False) as mock,
+    ):
+        mock_settings.return_value = mock_lib.MagicMock(
+            VAPI_API_KEY="test-key",
+            VAPI_ASSISTANT_ID="asst-123",
+            VAPI_PHONE_NUMBER_ID="not-a-uuid",
+        )
+        mock.post("/call").mock(return_value=httpx.Response(200, json=FAKE_VAPI_RESPONSE))
+
+        result = await vapi_module.initiate_call(contact)
+
+    assert result is None
+    mock_set_no_answer.assert_awaited_once_with(contact)
+    assert len(mock.calls) == 0
+
+
+@pytest.mark.asyncio
 async def test_vapi_api_error_sets_no_answer_and_does_not_raise():
     """On Vapi API error, last_call_outcome is set to no_answer and no exception is raised."""
     contact = make_phone_contact(contact_id="err-contact")
     vapi_module._active_calls.pop(contact.contact_id, None)
 
     import os
-    os.environ.setdefault("VAPI_API_KEY", "test-key")
-    os.environ.setdefault("VAPI_ASSISTANT_ID", "asst-123")
-    os.environ.setdefault("VAPI_PHONE_NUMBER_ID", "pn-456")
-    os.environ.setdefault("QDRANT_API_KEY", "qd-key")
-    os.environ.setdefault("QDRANT_ENDPOINT", "https://qdrant.example.com")
-    os.environ.setdefault("OPENAI_API_KEY", "oai-key")
-    os.environ.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    os.environ.setdefault("OPENAI_MODEL", "gpt-4o")
+    os.environ["VAPI_API_KEY"] = "test-key"
+    os.environ["VAPI_ASSISTANT_ID"] = "asst-123"
+    os.environ["VAPI_PHONE_NUMBER_ID"] = "123e4567-e89b-12d3-a456-426614174000"
+    os.environ["QDRANT_API_KEY"] = "qd-key"
+    os.environ["QDRANT_ENDPOINT"] = "https://qdrant.example.com"
+    os.environ["OPENAI_API_KEY"] = "oai-key"
+    os.environ["OPENAI_BASE_URL"] = "https://api.openai.com/v1"
+    os.environ["OPENAI_MODEL"] = "gpt-4o"
 
     import unittest.mock as mock_lib
     with respx.mock(base_url="https://api.vapi.ai") as mock:

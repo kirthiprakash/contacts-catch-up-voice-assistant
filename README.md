@@ -124,7 +124,24 @@ This will:
 
 > **Re-running:** The script exits with an error if any of the tool names already exist, to avoid duplicates. Delete existing tools from the Vapi dashboard before re-running.
 
-### 5. Start the server
+### 5. Seed sample contacts (optional but recommended for demos)
+
+Populates the database with 5 realistic contacts — complete with past call notes, social media handles, and conversation memories already stored in Qdrant:
+
+```bash
+python scripts/seed_contacts.py
+```
+
+This creates contacts like:
+- **Maya Patel** — college friend, just got promoted to Staff Engineer, cat had kittens
+- **David Okafor** — ex-colleague who left Stripe to build a climate-tech startup
+- **Sarah Chen** — family friend who moved to London, working on a novel
+- **Raj Sundaram** — university friend in Singapore, competitive chess player
+- **Priya Menon** — school friend, doctor considering a Johns Hopkins fellowship
+
+Each contact has realistic `last_called` timestamps, outcomes, call notes, and multiple memory entries (highlights, facts, summaries, social updates) so the AI has rich context to draw on during a call. Safe to re-run — skips contacts that already exist by name.
+
+### 6. Start the server
 
 ```bash
 uv run uvicorn app.main:app --reload --port 8000
@@ -221,6 +238,82 @@ The web UI at `http://localhost:8000` gives you:
 - **Create / Edit / Delete** contacts with a full-featured modal form
 - **Call Now** button that triggers an immediate outbound call and shows a live view as it happens — connecting → in progress (with timer) → ended (with outcome and summary)
 - **Memory feed** showing conversation highlights, summaries, and facts stored after each call
+
+---
+
+## Testing with SIP (no PSTN number needed)
+
+### What you need
+
+A **SIP softphone** — an app that registers with a SIP server and rings like a phone when called. The easiest free option is [Linphone](https://www.linphone.org/).
+
+### Setup with Linphone (5 minutes)
+
+1. **Create a free SIP account** at [linphone.org](https://www.linphone.org/freesip) — you'll get a SIP address like `sip:yourname@sip.linphone.org`
+
+2. **Install the Linphone app** on your phone or desktop:
+   - iOS / Android: search "Linphone" in the app store
+   - macOS / Windows / Linux: download from [linphone.org/downloads](https://www.linphone.org/downloads)
+
+3. **Sign in** to the app with your Linphone credentials — you'll see a green "registered" indicator when it's connected
+
+4. **Update your contact** in the dashboard (or in `seed_contacts.py`):
+   - Set **Contact Method** to **SIP**
+   - Set **SIP URI** to `sip:yourname@sip.linphone.org`
+
+5. **Hit Call Now** — Vapi dials the SIP URI, Linphone rings on your device
+
+### Alternative SIP providers
+
+| Provider | Free tier | Notes |
+|---|---|---|
+| [Linphone](https://linphone.org/freesip) | Yes | Easiest, no config needed |
+| [Zoiper](https://www.zoiper.com/) | Free tier | Good softphone app, needs a separate SIP account |
+| [OnSIP](https://www.onsip.com/) | Free for developers | More features |
+
+### Vapi SIP requirements
+
+Vapi sends calls to SIP URIs in the format `sip:user@domain`. Make sure your contact's SIP URI is in this format — no `sips:` or custom ports needed for Linphone.
+
+The `phone` field is still required by the Contact model (for validation). For SIP-only contacts, use a placeholder like `+10000000001` — it won't be dialled.
+
+---
+
+## Scheduler — automated calling
+
+The server runs two background jobs via APScheduler as soon as it starts:
+
+### Daily cron job
+
+Fires once a day (default: **09:00 server local time**) and:
+1. Loads all contacts from the database
+2. Scores them using the call decision engine (time since last call, priority boost, preferred call window)
+3. Calls the top-ranked contacts via Vapi
+
+To change the hour, set `SCHEDULER_DAILY_HOUR` in your `.env`:
+
+```bash
+export SCHEDULER_DAILY_HOUR=10   # fire at 10:00 instead of 09:00
+```
+
+### 5-minute polling job
+
+Runs every 5 minutes and calls any contacts whose `next_call_at` timestamp has passed. This is used for scheduled callbacks — if a contact asks to be called back at a specific time, it gets written to the database and this job picks it up.
+
+### How contacts are scored
+
+The scoring engine in `app/services/scoring.py` ranks contacts by:
+
+- **Days since last spoken** — the longer the gap, the higher the score
+- **Priority boost** — a manual multiplier you set per contact (0–10)
+- **Call time preference** — contacts set to "morning" only score highly during morning hours in their timezone; "evening" contacts score at night; "any time" contacts are always eligible
+- **In-progress calls** — contacts already on a call are skipped
+
+The top-ranked contacts above a minimum threshold get called each day.
+
+### Disabling the scheduler
+
+The scheduler starts automatically with the server. If you want to manage calls manually only (via the Call Now button), you can comment out `start_scheduler()` in `app/main.py`.
 
 ---
 

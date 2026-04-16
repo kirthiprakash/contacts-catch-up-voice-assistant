@@ -125,7 +125,7 @@ async def initiate_call(contact: Contact) -> VapiCallResponse:
 
     settings = get_settings()
 
-    if contact.contact_method != "sip" and not _is_valid_uuid(settings.VAPI_PHONE_NUMBER_ID):
+    if not _is_valid_uuid(settings.VAPI_PHONE_NUMBER_ID):
         logger.error(
             "Invalid VAPI_PHONE_NUMBER_ID configured: '%s'. Expected UUID.",
             settings.VAPI_PHONE_NUMBER_ID,
@@ -149,6 +149,7 @@ async def initiate_call(contact: Contact) -> VapiCallResponse:
             "assistantId": settings.VAPI_ASSISTANT_ID,
             "assistantOverrides": assistant_overrides,
             "metadata": metadata,
+            "phoneNumberId": settings.VAPI_PHONE_NUMBER_ID,  # Vapi needs this even for SIP (originating trunk)
             "customer": {"sipUri": contact.sip},
         }
     else:
@@ -177,10 +178,11 @@ async def initiate_call(contact: Contact) -> VapiCallResponse:
             data = response.json()
     except httpx.HTTPStatusError as exc:
         logger.error(
-            "Vapi API error for contact %s: %s %s",
+            "Vapi API error for contact %s: %s %s — payload sent: %s",
             contact.contact_id,
             exc.response.status_code,
             exc.response.text,
+            payload,
         )
         await _set_no_answer(contact)
         return None  # type: ignore[return-value]

@@ -145,11 +145,15 @@ async def initiate_call(contact: Contact) -> VapiCallResponse:
 
     # Build the Vapi payload based on contact method
     if contact.contact_method == "sip":
+        # SIP calls require a SIP trunk phone number ID, not a PSTN one.
+        # Free-tier PSTN numbers block all non-US calls including SIP.
+        # Set VAPI_SIP_TRUNK_ID in .env (Vapi dashboard → Phone Numbers → Add → SIP Trunk).
+        sip_trunk_id = settings.VAPI_SIP_TRUNK_ID or settings.VAPI_PHONE_NUMBER_ID
         payload = {
             "assistantId": settings.VAPI_ASSISTANT_ID,
             "assistantOverrides": assistant_overrides,
             "metadata": metadata,
-            "phoneNumberId": settings.VAPI_PHONE_NUMBER_ID,  # Vapi needs this even for SIP (originating trunk)
+            "phoneNumberId": sip_trunk_id,
             "customer": {"sipUri": contact.sip},
         }
     else:
@@ -177,19 +181,19 @@ async def initiate_call(contact: Contact) -> VapiCallResponse:
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPStatusError as exc:
+        body = exc.response.text
         logger.error(
-            "Vapi API error for contact %s: %s %s — payload sent: %s",
+            "Vapi API error for contact %s: %s %s",
             contact.contact_id,
             exc.response.status_code,
-            exc.response.text,
-            payload,
+            body,
         )
         await _set_no_answer(contact)
-        return None  # type: ignore[return-value]
+        raise VapiError(body) from exc
     except httpx.RequestError as exc:
         logger.error("Vapi request error for contact %s: %s", contact.contact_id, exc)
         await _set_no_answer(contact)
-        return None  # type: ignore[return-value]
+        raise VapiError(str(exc)) from exc
 
     # Register in active-call guard
     _active_calls[contact.contact_id] = call_started_at

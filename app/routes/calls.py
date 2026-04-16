@@ -198,7 +198,7 @@ async def trigger_call(contact_id: str):
     Manual trigger endpoint — initiates an immediate outbound call via Vapi
     for the given contact_id. Useful for smoke testing before the dashboard exists.
     """
-    from app.services.vapi import initiate_call, AlreadyOnCallError
+    from app.services.vapi import initiate_call, AlreadyOnCallError, VapiError
 
     contact = await _get_contact(contact_id)
 
@@ -206,9 +206,8 @@ async def trigger_call(contact_id: str):
         result = await initiate_call(contact)
     except AlreadyOnCallError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-
-    if result is None:
-        return {"status": "error", "detail": "Vapi API error — call not initiated; outcome set to no_answer"}
+    except VapiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
     return {"status": "initiated", "call_id": result.call_id}
 
@@ -270,6 +269,8 @@ async def get_memory(body: dict[str, Any]):
             "status": "degraded",
             "note": "memory backend unavailable",
         })
+    # Sort by recency so the AI sees the latest updates first
+    entries.sort(key=lambda e: e.timestamp, reverse=True)
     return _vapi_response(tool_call_id, {
         "memories": [{"text": e.text, "type": e.type, "timestamp": e.timestamp.isoformat()} for e in entries],
     })
@@ -297,6 +298,7 @@ async def search_memory_tool(body: dict[str, Any]):
 
     try:
         entries = await search_memory(request.contact_id, request.query)
+        entries.sort(key=lambda e: e.timestamp, reverse=True)
     except Exception as exc:
         logger.error(
             "search_memory backend failure for contact_id=%s: %s",

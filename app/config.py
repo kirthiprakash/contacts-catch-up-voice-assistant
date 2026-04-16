@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REFRESH_TOKEN: str = ""
 
+    # Optional: Vapi SIP trunk ID for SIP-mode contacts (separate from PSTN phone number)
+    # Create one in Vapi dashboard → Phone Numbers → Add → SIP Trunk
+    VAPI_SIP_TRUNK_ID: str = ""
+
     # App identity (used in assistant prompts and webhook URL)
     USER_NAME: str = "your friend"          # Name of the person on whose behalf calls are made
     APP_BASE: str = ""                      # Public base URL, e.g. https://xyz.ngrok-free.dev

@@ -88,6 +88,7 @@ cp .env.example .env
 | `OPENAI_API_KEY` | Yes | OpenAI API key (used for fallback outcome classification) |
 | `OPENAI_BASE_URL` | Yes | OpenAI-compatible base URL (`https://api.openai.com/v1`) |
 | `OPENAI_MODEL` | Yes | Model name (e.g. `gpt-4o`) |
+| `VAPI_SIP_TRUNK_ID` | No | Vapi SIP number ID for SIP-mode contacts — created by `setup_vapi.py` |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth — for calendar-aware scheduling |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret |
 | `GOOGLE_REFRESH_TOKEN` | No | Google OAuth refresh token |
@@ -111,18 +112,34 @@ vapi listen --port 8000
 
 ### 4. Provision Vapi tools and assistant
 
-Run the setup script once. It creates all 6 conversation tools and the assistant on your Vapi account:
+Run the setup script once. It provisions everything on your Vapi account in order:
 
 ```bash
 python scripts/setup_vapi.py
 ```
 
-This will:
-- Create 6 server tools pointing to your `APP_BASE` (get context, get/save memory, get/update calendar, get social updates)
-- Create the assistant with the right system prompt, voice, transcriber config, and `serverUrl` for webhooks
-- Print the `VAPI_ASSISTANT_ID` — copy it into your `.env`
+**Phase 0a — PSTN phone number:** Buys a Vapi-managed US phone number (area code 415 by default). Skipped if `VAPI_PHONE_NUMBER_ID` is already set in `.env`.
 
-> **Re-running:** The script exits with an error if any of the tool names already exist, to avoid duplicates. Delete existing tools from the Vapi dashboard before re-running.
+**Phase 0b — Vapi SIP number:** Creates a Vapi-managed SIP number (`sip:contacts-catchup@sip.vapi.ai`) — no third-party SIP provider needed. Skipped if `VAPI_SIP_TRUNK_ID` is already set.
+
+**Phase 1 — Tools:** Creates all 6 server tools pointing to your `APP_BASE`. Exits with an error if any tool name already exists — delete them in the Vapi dashboard first.
+
+**Phase 2 — Assistant:** Creates the assistant with the full system prompt, voice config, tool bindings, and `serverUrl` for webhooks.
+
+At the end, the script prints all IDs — copy them into your `.env`:
+
+```
+export VAPI_PHONE_NUMBER_ID=...
+export VAPI_SIP_TRUNK_ID=...
+export VAPI_ASSISTANT_ID=...
+```
+
+**Re-running just the numbers** (after already creating tools and assistant):
+
+```bash
+python scripts/setup_vapi.py --skip-numbers
+# This only re-runs phases 1 and 2, not phone number provisioning
+```
 
 ### 5. Seed sample contacts (optional but recommended for demos)
 

@@ -117,10 +117,11 @@ CONTACTS = [
     },
     {
         "name": "Raj Sundaram",
-        # SIP contact — reachable via Linphone/Zoiper softphone (no PSTN number needed)
-        # Replace with your actual SIP URI: sip:yourusername@sip.linphone.org
+        # SIP contact — REPLACE sip URI before demoing or the call will fail immediately.
+        # Use your Linphone address: sip:yourusername@sip.linphone.org
+        # Or your Vapi SIP number: sip:contacts-catchup@sip.vapi.ai
         "phone": "+6500000001",       # placeholder — not dialled for SIP contacts
-        "sip": "sip:raj.sundaram@sip.linphone.org",
+        "sip": "sip:REPLACE_ME@sip.linphone.org",
         "contact_method": "sip",
         "tags": ["university", "singapore", "chess"],
         "timezone": "Asia/Singapore",
@@ -140,10 +141,10 @@ CONTACTS = [
     },
     {
         "name": "Priya Menon",
-        # SIP contact — Indian number, use SIP to avoid Vapi free-tier restrictions
-        # Replace with your actual SIP URI: sip:yourusername@sip.linphone.org
+        # SIP contact — REPLACE sip URI before demoing or the call will fail immediately.
+        # Use your Linphone address: sip:yourusername@sip.linphone.org
         "phone": "+910000000001",     # placeholder — not dialled for SIP contacts
-        "sip": "sip:priya.menon@sip.linphone.org",
+        "sip": "sip:REPLACE_ME@sip.linphone.org",
         "contact_method": "sip",
         "tags": ["school-friend", "doctor", "chennai"],
         "timezone": "Asia/Kolkata",

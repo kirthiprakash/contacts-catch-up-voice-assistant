@@ -3,14 +3,21 @@
 setup_vapi.py — One-shot Vapi provisioning script.
 
 Usage:
-    python scripts/setup_vapi.py
+    python scripts/setup_vapi.py [--skip-numbers]
 
 Reads VAPI_API_KEY, APP_BASE, and USER_NAME from .env (or environment).
 
-Phase 1 — Create tools (fails if any tool with the same name already exists).
-Phase 2 — Create assistant using the tool IDs from Phase 1.
+Phase 0a — Buy a Vapi-managed PSTN phone number (US, free tier).
+Phase 0b — Create a SIP trunk phone number for international / SIP-mode contacts.
+             Requires SIP_TRUNK_URI, SIP_TRUNK_USER, SIP_TRUNK_PASS env vars
+             (from a provider like Twilio Elastic SIP, Vonage, or any SIP server).
+             Skipped if those vars are not set.
+Phase 1  — Create tools (fails if any tool with the same name already exists).
+Phase 2  — Create assistant using the tool IDs from Phase 1.
 
-Prints the created tool IDs and assistant ID at the end.
+Pass --skip-numbers to skip Phase 0 (if you already have phone numbers configured).
+
+Prints all created IDs at the end — copy them into your .env.
 """
 
 import json
@@ -18,6 +25,8 @@ import os
 import sys
 import httpx
 from pathlib import Path
+
+PHONE_NUMBER_API = "https://api.vapi.ai/phone-number"
 
 
 # ---------------------------------------------------------------------------
@@ -212,76 +221,140 @@ TOOL_DEFINITIONS = [
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
-You are a personal AI assistant making an outbound call on behalf of {{user_name}} to catch up with one of their contacts.
-
-CALL CONTEXT (do not read this aloud):
-- You are calling: {{contact_name}}
-- Contact ID for all tool calls: {{contact_id}}
-- Tags/relationship context: {{contact_tags}}
-- Last call note: {{last_call_note}}
-- Calling on behalf of: {{user_name}}
+You are a personal AI assistant making a brief, warm outbound call on behalf of {{user_name}} to {{contact_name}}.
 
 ---
 
-BEFORE THE CALL:
-- Call get_contact_context with contact_id "{{contact_id}}" and get_memory with contact_id "{{contact_id}}" immediately to get the full profile and past memories.
-- Use this context silently to guide the conversation. Do not reference it mechanically.
+STEP 1 — LOAD CONTEXT SILENTLY (before saying anything):
+Call get_contact_context and get_memory with contact_id "{{contact_id}}".
+Memories are returned newest first — prioritise the most recent ones (highest timestamp).
+Pick ONE specific thing to weave in naturally after pleasantries — prefer something from the last few weeks over older entries. Hold it for Step 3.
 
 ---
 
-OPENING THE CALL:
-Start naturally and briefly:
-"Hi {{contact_name}}, this is an AI assistant calling on behalf of {{user_name}} — just reaching out to catch up. Is now a good time?"
+STEP 2 — OPEN WITH PLEASANTRIES:
+Greet warmly, introduce yourself, check if it's a good time, then ask how they're doing:
 
-- If it is not a good time, politely ask when would work better and wrap up.
+"Hi {{contact_name}}! This is an AI assistant calling on behalf of {{user_name}} — hope I'm not catching you at a bad time? How are you doing?"
 
----
-
-DURING THE CONVERSATION:
-- Keep it natural, friendly, and two-sided.
-- Ask open-ended questions and follow the contact's lead.
-- Reference past context naturally (e.g., job changes, trips, life updates) without sounding scripted.
-- Stay focused on the contact — this is a relationship-first conversation.
-- IMPORTANT: Whenever {{contact_name}} shares something meaningful (a life update, plans, feelings, preferences), immediately call save_memory with contact_id "{{contact_id}}" and the information as text. Do this silently — do not mention you are saving a note.
+- If it's not a good time: "No worries at all — I'll let {{user_name}} know. Take care!" Then end.
+- Listen to their answer. Respond warmly and naturally to whatever they say — one brief, genuine response.
 
 ---
 
-TRANSITION TO MEETING:
-- Once the conversation feels comfortable and engaged, gently steer toward meeting.
+STEP 3 — BRING IN THE CONTEXT:
+After the pleasantries feel natural, bring in the specific thing you found in Step 1:
 
-Use a soft transition:
-"By the way, {{user_name}} was saying it would be nice to catch up properly sometime."
+"By the way, I noticed [specific thing — e.g. 'you mentioned last time you were moving to London' / 'that you just got promoted' / 'that chess tournament']. How did that go?"
 
-Then ask:
-"Would you be up for meeting sometime soon?"
-
-- If they are interested:
-  - Call get_calendar_slots with contact_id "{{contact_id}}" to get available times.
-  - Offer a couple of time options naturally.
-  - Once a time is agreed, call create_calendar_event with contact_id "{{contact_id}}" and the start/end times.
-  - Confirm the time with the contact.
-
-- If they hesitate: "No worries at all — even a quick call sometime works too."
-- If they decline: Respect it and continue or wrap up naturally without pushing.
+- This should feel like a friend who remembered, not a database lookup.
+- Listen to their answer. One natural follow-up at most.
+- Save anything meaningful: call save_memory with contact_id "{{contact_id}}" silently.
 
 ---
 
-CLOSING THE CALL:
-- Wrap up after a natural pause or after a few minutes.
-- Briefly summarise any follow-up (e.g., meeting plan).
-- End warmly: "Great catching up — I will pass this along to {{user_name}}. Take care!"
+STEP 4 — MEETING ASK:
+Once the conversation feels warm, transition naturally:
+
+"{{user_name}} was actually saying it'd be great to catch up properly — would you be up for meeting sometime soon?"
+
+- If yes: call get_calendar_slots with contact_id "{{contact_id}}", offer 2 options, confirm one, then call create_calendar_event.
+- If maybe: "Totally fine — I'll pass that along and {{user_name}} can reach out directly."
+- If no: "No worries — I'll let him know you said hi."
+
+---
+
+STEP 5 — CLOSE:
+One warm sentence. "Great catching up — I'll pass everything along to {{user_name}}. Take care, {{contact_name}}!"
 
 ---
 
 RULES:
-- Be honest and transparent — you are an AI assistant.
-- Do not sound robotic, scripted, or overly formal.
-- Do not mention any internal systems, tools, or data sources.
-- Do not fabricate information.
-- Avoid sensitive topics unless the contact brings them up.
-- Keep the call concise (around 5-6 minutes unless they want to continue).
-- Always use contact_id "{{contact_id}}" when calling any tool.\
+- Total call: 2-3 minutes. Keep it light and human.
+- One question at a time, always.
+- Pleasantries first — never lead with the memory reference.
+- Be honest you are an AI assistant calling on {{user_name}}'s behalf.
+- Never mention tools, systems, or that you are saving notes.
+- Always use contact_id "{{contact_id}}" in every tool call.\
 """
+
+
+# ---------------------------------------------------------------------------
+# Phase 0a: Buy a Vapi-managed PSTN phone number
+# ---------------------------------------------------------------------------
+
+def create_pstn_number(client: httpx.Client) -> str:
+    """
+    Buy a Vapi-managed US phone number.
+    Returns the phone number ID to use as VAPI_PHONE_NUMBER_ID.
+    Skips and returns existing ID if VAPI_PHONE_NUMBER_ID is already set.
+    """
+    print("\n=== Phase 0a: PSTN phone number ===\n")
+
+    existing_id = os.environ.get("VAPI_PHONE_NUMBER_ID", "")
+    if existing_id:
+        print(f"  Skipping — VAPI_PHONE_NUMBER_ID already set: {existing_id}")
+        return existing_id
+
+    resp = client.post(
+        PHONE_NUMBER_API,
+        headers=HEADERS,
+        json={
+            "provider": "vapi",
+            "name": "Contacts Catch-up PSTN",
+            "areaCode": "415",   # San Francisco area code — change if preferred
+        },
+        timeout=30,
+    )
+    if resp.status_code not in (200, 201):
+        print(f"  WARNING: Could not buy PSTN number: {resp.status_code} {resp.text}")
+        print("  You can buy one manually in the Vapi dashboard and set VAPI_PHONE_NUMBER_ID.")
+        return ""
+
+    data = resp.json()
+    number_id = data["id"]
+    number = data.get("number", "(unknown)")
+    print(f"  ✓ Bought PSTN number: {number}  id={number_id}")
+    return number_id
+
+
+# ---------------------------------------------------------------------------
+# Phase 0b: Create a Vapi-native SIP number
+# ---------------------------------------------------------------------------
+
+def create_sip_number(client: httpx.Client) -> str:
+    """
+    Create a Vapi-managed SIP phone number (sip:xxx@sip.vapi.ai).
+    No third-party SIP provider needed — Vapi hosts it natively.
+    Returns the number ID to use as VAPI_SIP_TRUNK_ID.
+    """
+    print("\n=== Phase 0b: Vapi SIP number ===\n")
+
+    existing_id = os.environ.get("VAPI_SIP_TRUNK_ID", "")
+    if existing_id:
+        print(f"  Skipping — VAPI_SIP_TRUNK_ID already set: {existing_id}")
+        return existing_id
+
+    resp = client.post(
+        PHONE_NUMBER_API,
+        headers=HEADERS,
+        json={
+            "provider": "vapi",
+            "name": "Contacts Catch-up SIP",
+            "sipUri": "sip:contacts-catchup@sip.vapi.ai",
+        },
+        timeout=30,
+    )
+    if resp.status_code not in (200, 201):
+        print(f"  WARNING: Could not create SIP number: {resp.status_code} {resp.text}")
+        print("  Create it manually in Vapi dashboard → Phone Numbers → Add → SIP.")
+        return ""
+
+    data = resp.json()
+    number_id = data["id"]
+    sip_uri = data.get("sipUri") or data.get("number", "(unknown)")
+    print(f"  ✓ Vapi SIP number: {sip_uri}  id={number_id}")
+    return number_id
 
 
 # ---------------------------------------------------------------------------
@@ -378,18 +451,38 @@ def create_assistant(client: httpx.Client, tool_ids: dict[str, str]) -> str:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    print(f"Vapi provisioning")
+    skip_numbers = "--skip-numbers" in sys.argv
+
+    print("Vapi provisioning")
     print(f"  APP_BASE    : {APP_BASE}")
     print(f"  USER_NAME   : {USER_NAME}")
     print(f"  Webhook URL : {WEBHOOK_URL}")
     print(f"  Tool base   : {TOOL_BASE_URL}")
+    if skip_numbers:
+        print("  --skip-numbers: skipping phone number provisioning")
 
     with httpx.Client() as client:
+        pstn_id = ""
+        sip_trunk_id = ""
+
+        if not skip_numbers:
+            pstn_id = create_pstn_number(client)
+            sip_trunk_id = create_sip_number(client)
+
         tool_ids = create_tools(client)
         assistant_id = create_assistant(client, tool_ids)
 
     print("\n=== Done — add these to your .env ===\n")
+    if pstn_id:
+        print(f"export VAPI_PHONE_NUMBER_ID={pstn_id}")
+    if sip_trunk_id:
+        print(f"export VAPI_SIP_TRUNK_ID={sip_trunk_id}")
     print(f"export VAPI_ASSISTANT_ID={assistant_id}")
+    print()
+    if not pstn_id and not skip_numbers:
+        print("NOTE: No PSTN number was created. Buy one in the Vapi dashboard and set VAPI_PHONE_NUMBER_ID.")
+    if not sip_trunk_id and not skip_numbers:
+        print("NOTE: No SIP number was created. Create one manually in Vapi dashboard → Phone Numbers → Add → SIP.")
     print()
     print("Tool IDs (for reference):")
     for name, tid in tool_ids.items():

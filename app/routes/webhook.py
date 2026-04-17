@@ -29,10 +29,17 @@ class VapiCallMetadata(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class VapiAssistantOverrides(BaseModel):
+    variable_values: Optional[dict] = Field(None, alias="variableValues")
+
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+
 class VapiCall(BaseModel):
     id: str = ""
     ended_reason: Optional[str] = Field(None, alias="endedReason")
     metadata: Optional[VapiCallMetadata] = None
+    assistant_overrides: Optional[VapiAssistantOverrides] = Field(None, alias="assistantOverrides")
 
     model_config = {"extra": "allow", "populate_by_name": True}
 
@@ -72,8 +79,17 @@ class VapiWebhookPayload(BaseModel):
 
     @property
     def contact_id(self) -> Optional[str]:
+        # Prefer metadata.contact_id (set when backend initiates PSTN/SIP call)
         if self.call and self.call.metadata:
-            return self.call.metadata.contact_id
+            cid = self.call.metadata.contact_id
+            if cid:
+                return cid
+        # Fallback: variableValues set via Web SDK assistantOverrides
+        if self.call and self.call.assistant_overrides:
+            vv = self.call.assistant_overrides.variable_values or {}
+            cid = vv.get("contact_id")
+            if cid:
+                return cid
         return None
 
 

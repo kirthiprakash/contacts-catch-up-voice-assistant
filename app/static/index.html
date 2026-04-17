@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Contacts Catch-Up</title>
   <script src="/static/tailwind.js"></script>
+  <!-- Vapi Web SDK: ESM module, exposes window.VapiClass once loaded -->
+  <script type="module">
+    try {
+      const mod = await import('https://esm.sh/@vapi-ai/web@2.5.2');
+      window.VapiClass = mod.default || mod.Vapi || Object.values(mod)[0];
+    } catch (e) {
+      console.warn('Vapi Web SDK failed to load (will fall back to PSTN/SIP):', e);
+    }
+    window.dispatchEvent(new CustomEvent('vapi-sdk-ready'));
+  </script>
   <style>
     [x-cloak] { display: none !important; }
     @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -227,10 +237,22 @@ let sseSource = null;
 let callTimer = null;
 let callSeconds = 0;
 let currentMethod = 'phone';
+let vapiConfig = null;   // loaded from /api/calls/config
+let vapiInstance = null; // active Vapi Web SDK instance
+
+// Resolved when the ESM module script finishes (success or failure)
+let _vapiSdkReadyResolve;
+const _vapiSdkReady = new Promise(r => { _vapiSdkReadyResolve = r; });
+window.addEventListener('vapi-sdk-ready', () => _vapiSdkReadyResolve());
+function waitForVapiSDK() { return _vapiSdkReady; }
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 async function init() {
-  await loadContacts();
+  // Load contacts and config in parallel
+  await Promise.all([
+    loadContacts(),
+    api('GET', '/api/calls/config').then(cfg => { vapiConfig = cfg; }).catch(() => {}),
+  ]);
   const hash = location.hash.replace('#', '');
   if (hash) selectContact(hash);
 }
@@ -311,6 +333,7 @@ async function selectContact(id) {
 
   const panel = document.getElementById('main-panel');
   panel.innerHTML = renderDetailSkeleton(contact);
+  updateCallViaText(contact);
 
   // Load memories in background
   loadMemories(id);
@@ -418,7 +441,7 @@ function renderDetailSkeleton(c) {
         </button>
       </div>
       <div class="px-4 py-2 text-xs text-slate-500 border-b border-slate-800">
-        Will call via <span class="font-medium text-slate-400">${c.contact_method === 'sip' ? '🌐 SIP — ' + (c.sip || 'no SIP URI set') : '📞 Phone — ' + c.phone}</span>
+        Will call via <span id="call-method-display" class="font-medium text-slate-400" data-method="${c.contact_method}" data-phone="${c.phone}" data-sip="${c.sip || ''}">${c.contact_method === 'sip' ? '🌐 SIP — ' + (c.sip || 'no SIP URI set') : '📞 Phone — ' + c.phone}</span>
       </div>
       <div id="call-live" class="p-4 min-h-[80px] flex items-center justify-center text-slate-600 text-sm">
         No active call
@@ -461,24 +484,98 @@ async function loadMemories(contactId) {
 }
 
 // ─── Live call ────────────────────────────────────────────────────────────────
+function updateCallViaText(contact) {
+  const el = document.getElementById('call-method-display');
+  if (!el) return;
+  if (vapiConfig?.vapi_public_key) {
+    el.textContent = '🌐 Browser (WebRTC) · free';
+    el.className = 'font-medium text-emerald-400';
+  } else {
+    const m = el.dataset.method || contact?.contact_method;
+    el.textContent = m === 'sip'
+      ? `🌐 SIP — ${el.dataset.sip || contact?.sip || 'no SIP URI set'}`
+      : `📞 Phone — ${el.dataset.phone || contact?.phone}`;
+    el.className = 'font-medium text-slate-400';
+  }
+}
+
 async function triggerCall(contactId) {
   const btn = document.getElementById('call-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
 
   try {
-    const result = await api('POST', `/api/calls/trigger/${contactId}`);
-    if (result && result.status === 'error') {
-      throw new Error(result.detail || 'Call failed to initiate');
+    await waitForVapiSDK();  // wait for ESM module to finish loading
+
+    if (vapiConfig?.vapi_public_key && window.VapiClass) {
+      await _startWebCall(contactId);
+    } else {
+      await _startBackendCall(contactId);
     }
-    activeCallId = contactId;
-    startCallTimer();
-    updateCallUI('connecting', null);
-    subscribeCallSSE(contactId);
-    renderList(contacts.filter(() => true));
   } catch (e) {
-    updateCallUI('error', e.message);
+    updateCallUI('error', e.message || 'Call failed');
     if (btn) { btn.disabled = false; btn.innerHTML = callBtnHTML(); }
   }
+}
+
+async function _startWebCall(contactId) {
+  const contact = contacts.find(c => c.contact_id === contactId);
+  if (!contact) throw new Error('Contact not found');
+
+  // Tear down any existing Vapi instance
+  if (vapiInstance) { try { vapiInstance.stop(); } catch {} vapiInstance = null; }
+
+  const vapi = new window.VapiClass(vapiConfig.vapi_public_key);
+  vapiInstance = vapi;
+
+  vapi.on('call-start', () => {
+    activeCallId = contactId;
+    startCallTimer();
+    updateCallUI('in-progress', null);
+    renderList(contacts.filter(() => true));
+  });
+
+  vapi.on('call-end', () => {
+    stopCallTimer();
+    activeCallId = null;
+    vapiInstance = null;
+    updateCallUI('ended', { outcome: 'answered' });
+    // Reload contact data after webhook has time to process (needs APP_BASE/ngrok)
+    setTimeout(() => reloadContact(contactId), 4000);
+  });
+
+  vapi.on('error', (e) => {
+    stopCallTimer();
+    activeCallId = null;
+    vapiInstance = null;
+    const msg = (typeof e === 'string' ? e : e?.message || e?.error || JSON.stringify(e)) || 'WebRTC call error';
+    updateCallUI('error', msg);
+    const btn = document.getElementById('call-btn');
+    if (btn) { btn.disabled = false; btn.innerHTML = callBtnHTML(); }
+    renderList(contacts.filter(() => true));
+  });
+
+  // Start call — vapi_assistant_id + per-contact variable overrides
+  await vapi.start(vapiConfig.vapi_assistant_id, {
+    variableValues: {
+      user_name: vapiConfig.user_name || 'your friend',
+      contact_id: contact.contact_id,
+      contact_name: contact.name,
+      contact_tags: (contact.tags || []).join(', ') || 'none',
+      last_call_note: contact.last_call_note || 'No previous calls recorded.',
+    },
+  });
+}
+
+async function _startBackendCall(contactId) {
+  const result = await api('POST', `/api/calls/trigger/${contactId}`);
+  if (result && result.status === 'error') {
+    throw new Error(result.detail || 'Call failed to initiate');
+  }
+  activeCallId = contactId;
+  startCallTimer();
+  updateCallUI('connecting', null);
+  subscribeCallSSE(contactId);
+  renderList(contacts.filter(() => true));
 }
 
 function callBtnHTML() {

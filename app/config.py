@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # Create one in Vapi dashboard → Phone Numbers → Add → SIP Trunk
     VAPI_SIP_TRUNK_ID: str = ""
 
+    # Public key for Vapi Web SDK (browser-safe; from Vapi dashboard → Account → Public Key)
+    # Enables browser-based WebRTC calls — free, no PSTN charges, passes variableValues correctly.
+    VAPI_PUBLIC_KEY: str = ""
+
     # App identity (used in assistant prompts and webhook URL)
     USER_NAME: str = "your friend"          # Name of the person on whose behalf calls are made
     APP_BASE: str = ""                      # Public base URL, e.g. https://xyz.ngrok-free.dev

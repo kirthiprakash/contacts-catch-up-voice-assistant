@@ -172,6 +172,18 @@ async def _get_contact(contact_id: str):
 # Manual trigger endpoint (task 5)
 # ---------------------------------------------------------------------------
 
+@router.get("/config", summary="Public configuration for the browser client")
+async def get_config():
+    """Returns browser-safe config values (no secrets). Used by the Web SDK integration."""
+    from app.config import get_settings
+    settings = get_settings()
+    return {
+        "vapi_public_key": settings.VAPI_PUBLIC_KEY,
+        "vapi_assistant_id": settings.VAPI_ASSISTANT_ID,
+        "user_name": settings.USER_NAME,
+    }
+
+
 @router.get("/active", summary="Return currently active call contact IDs")
 async def active_calls():
     from app.services.vapi import _active_calls

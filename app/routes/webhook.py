@@ -29,10 +29,17 @@ class VapiCallMetadata(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class VapiAssistantOverrides(BaseModel):
+    variable_values: Optional[dict] = Field(None, alias="variableValues")
+
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+
 class VapiCall(BaseModel):
     id: str = ""
     ended_reason: Optional[str] = Field(None, alias="endedReason")
     metadata: Optional[VapiCallMetadata] = None
+    assistant_overrides: Optional[VapiAssistantOverrides] = Field(None, alias="assistantOverrides")
 
     model_config = {"extra": "allow", "populate_by_name": True}
 
@@ -72,8 +79,45 @@ class VapiWebhookPayload(BaseModel):
 
     @property
     def contact_id(self) -> Optional[str]:
-        if self.call and self.call.metadata:
+        if not self.call:
+            return None
+
+        # 1. metadata.contact_id — set when backend initiates PSTN/SIP call
+        if self.call.metadata and self.call.metadata.contact_id:
             return self.call.metadata.contact_id
+
+        # 2. Web call registry — browser registers call_id → contact_id via /api/calls/web-register
+        if self.call.id:
+            from app.services.vapi import get_web_call_contact
+            cid = get_web_call_contact(self.call.id)
+            if cid:
+                return cid
+
+        # 3. assistantOverrides.variableValues — Pydantic-parsed path
+        if self.call.assistant_overrides:
+            vv = self.call.assistant_overrides.variable_values or {}
+            cid = vv.get("contact_id")
+            if cid:
+                return cid
+
+        # 4. Raw model_extra — bypass Pydantic in case aliasing missed the field
+        raw = self.call.model_extra or {}
+        for key in ("assistantOverrides", "assistant_overrides"):
+            overrides = raw.get(key) or {}
+            if isinstance(overrides, dict):
+                vv = overrides.get("variableValues") or overrides.get("variable_values") or {}
+                cid = vv.get("contact_id") if isinstance(vv, dict) else None
+                if cid:
+                    logger.info("contact_id found via raw model_extra[%s]", key)
+                    return cid
+
+        logger.warning(
+            "contact_id not found in webhook payload for call %s — "
+            "metadata=%s extra_keys=%s",
+            self.call.id,
+            self.call.metadata,
+            list(raw.keys()),
+        )
         return None
 
 

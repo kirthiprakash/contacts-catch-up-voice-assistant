@@ -1,13 +1,12 @@
 # AGENTS.md — Contacts Catch-Up Voice Assistant
 
 This file provides context for coding assistants working in this repository. Read it before making any changes.
-Refer to /.kiro/specs/contacts-catch-up-voice-assistant for the initial requirements, design spec and implementation tasks
 
 ---
 
 ## What This Project Is
 
-A locally-hosted Python/FastAPI application that places proactive outbound voice calls to a curated list of ~10 contacts. It uses a deterministic scoring engine to decide who to call, enriches conversations with semantic memory from a vector database (Qdrant), and extracts structured insights from call transcripts via an LLM. A lightweight web dashboard handles contact management and call monitoring.
+A locally-hosted Python/FastAPI application that places proactive outbound voice calls to a curated list of contacts to keep relationships warm. A deterministic scoring engine decides who to call; Vapi handles the voice call with an AI assistant that has access to semantic memory (Qdrant). After each call, highlights and summaries are stored back into memory. A modern single-page dashboard handles contact management and live call monitoring.
 
 This is a **hackathon POC** — optimise for working demo over production robustness. Mocked external services (social feeds, calendar) are intentional and correct.
 
@@ -15,13 +14,12 @@ This is a **hackathon POC** — optimise for working demo over production robust
 
 ## Architecture at a Glance
 
-Three runtime concerns:
-
-- **FastAPI HTTP server** — dashboard HTML routes (`/`), contact API (`/api/contacts`), Vapi tool endpoints (`/tools/*`), and webhook handler (`/webhook/vapi`)
+- **FastAPI HTTP server** — SPA (`/`), contact API (`/api/contacts`), call trigger + SSE stream (`/api/calls`), Vapi tool endpoints (`/api/calls/tools/*`), webhook handler (`/webhook/vapi`)
 - **APScheduler background workers** — daily cron (scoring + call trigger) and 5-minute polling loop (callback checks + stale call sweep)
-- **External services** — Vapi (voice calls), Qdrant Cloud (vector memory), OpenAI-compatible LLM (extraction + embeddings), Google Calendar (stubbed by default)
+- **SSE pub/sub bus** (`app/sse_bus.py`) — webhook publishes events; `/api/calls/live/{id}` streams them to the browser UI in real time
+- **External services** — Vapi (voice calls), Qdrant Cloud (vector memory), OpenAI-compatible LLM (fallback classification + embeddings)
 
-The two datastores have distinct roles: **SQLite** holds structured contact records; **Qdrant** holds semantic memory entries (embeddings of highlights, facts, and social updates per contact).
+Two datastores: **SQLite** holds structured contact records; **Qdrant** holds semantic memory entries (embeddings of highlights, facts, summaries, and social updates per contact).
 
 ---
 
@@ -29,39 +27,36 @@ The two datastores have distinct roles: **SQLite** holds structured contact reco
 
 ```
 app/
-  config.py              # pydantic-settings env var loading; raises ConfigurationError on missing vars
+  config.py              # pydantic-settings env var loading
   main.py                # FastAPI app factory; registers routers; startup lifespan
-  db.py                  # aiosqlite connection; init_db(); JSON helpers for tags/social_handles
+  db.py                  # aiosqlite connection; init_db(); JSON helpers
+  sse_bus.py             # In-process async pub/sub for live call SSE events
   models/
     contact.py           # Contact, TimeWindow, SocialHandles Pydantic models
-    memory.py            # MemoryEntry, ExtractionResult, CallbackIntent Pydantic models
+    memory.py            # MemoryEntry, ExtractionResult, CallbackIntent models
   routes/
-    contacts.py          # /api/contacts CRUD
-    calls.py             # /tools/* Vapi tool endpoints + /api/calls manual trigger
-    webhook.py           # /webhook/vapi post-call processing
-    dashboard.py         # HTML routes: /, /contacts/{id}, /contacts/new
+    contacts.py          # /api/contacts CRUD + /api/contacts/{id}/memories
+    calls.py             # /api/calls/trigger, /api/calls/live SSE, /api/calls/tools/* Vapi tools
+    webhook.py           # /webhook/vapi post-call processing (background task)
+    dashboard.py         # Serves app/static/index.html for all SPA routes
   services/
     scoring.py           # Deterministic scoring engine
-    vapi.py              # Outbound call initiation; active call guard
+    vapi.py              # Outbound call initiation (phone + SIP); active call guard
     qdrant.py            # Memory store; ensure_collection_exists on startup
-    embedding.py         # nomic-embed-text via OpenAI-compatible endpoint
-    llm.py               # Transcript extraction with retry
+    embedding.py         # Text embeddings with SHA-256 deterministic fallback
     calendar.py          # Google Calendar or mock
     social/
       base.py            # SocialAdapterBase ABC + SocialUpdate model
-      fixtures.py        # Fixture data keyed by contact name (lowercased) + __default__
-      twitter.py
-      instagram.py
-      linkedin.py
-      ingest.py          # ingest_social_updates(contact) — iterates all adapters
+      fixtures.py        # Fixture data keyed by contact name — no real API calls
+      twitter.py / instagram.py / linkedin.py / ingest.py
   workers/
-    scheduler.py         # APScheduler setup; daily cron; 5-min poller; crash recovery
-  templates/
-    base.html
-    contacts/
-      list.html
-      detail.html
-      form.html
+    scheduler.py         # APScheduler: daily cron, 5-min poller, crash recovery
+  static/
+    index.html           # Single-page app (Tailwind CSS + vanilla JS, no build step)
+    tailwind.js          # Tailwind Play CDN served locally (committed to repo)
+scripts/
+  setup_vapi.py          # One-shot Vapi provisioning: PSTN number, SIP number, tools, assistant
+  seed_contacts.py       # Seed SQLite + Qdrant with sample contacts and memories
 tests/
   unit/
   integration/
@@ -77,33 +72,39 @@ tests/
 
 **Pydantic:** Models live in `app/models/`. Use Pydantic v2. Validate E.164 phone numbers with a field validator on `Contact`. Do not use `dict()` — use `model_dump()`.
 
-**Database:** Raw `aiosqlite` — no ORM. JSON columns (`tags`, `preferred_time_window`, `social_handles`) are serialised with `json.dumps` on write and `json.loads` on read. Helpers for this live in `db.py`.
+**Database:** Raw `aiosqlite` — no ORM. JSON columns (`tags`, `preferred_time_window`, `social_handles`) are serialised with `json.dumps` on write and `json.loads` on read. Helpers in `db.py`.
 
-**Error handling:** Raise typed exceptions (`ConfigurationError`, `VapiError`, `AlreadyOnCallError`, `MemoryStoreError`). Never swallow exceptions silently — always log before continuing.
+**Error handling:** Raise typed exceptions (`ConfigurationError`, `VapiError`, `AlreadyOnCallError`). Never swallow exceptions silently — always log before continuing.
 
-**Routes:** Maintain a strict separation: `/api/...` routes return JSON only; `/...` routes return HTML only. This allows the HTML frontend to be replaced later without touching the API.
+**Routes:** `/api/...` routes return JSON only. `/` and `/contacts/*` serve the SPA. This keeps the API decoupled from the frontend.
 
 ---
 
 ## Key Design Decisions to Preserve
 
-**Webhook handler must return 200 immediately.** All post-call processing (LLM extraction, embedding, memory storage, contact update) runs in a FastAPI `BackgroundTasks` task. Never do this work inline — Vapi has a short webhook timeout.
+**Webhook returns 200 immediately.** All post-call processing runs in a FastAPI `BackgroundTasks` task. Never do this inline — Vapi has a short webhook timeout.
 
-**Idempotency on webhooks.** A `processed_calls` table in SQLite stores processed `call_id` values. The webhook handler checks this before processing and skips duplicates. This table is created in `init_db()`.
+**Idempotency on webhooks.** A `processed_calls` table in SQLite stores processed `call_id` values. The webhook checks this before processing and skips duplicates.
 
-**Scoring uses `last_spoken`, not `last_called`.** `last_called` is when a call was initiated (may have been unanswered). `last_spoken` is when a real conversation happened. The scoring formula's `days_since_last_call` term always derives from `last_spoken`.
+**Scoring uses `last_spoken`, not `last_called`.** `last_called` is when a call was initiated (may have been unanswered). `last_spoken` is when a real conversation happened. The scoring formula derives `days_since_last_call` from `last_spoken`.
 
-**Callback override bypasses recency filter.** A contact with `next_call_at <= now` is always selected first by `get_top_contacts`, even if they were recently called. This is intentional — it's an explicit user-requested callback.
+**`_active_calls` is `dict[str, datetime]`, not a set.** Maps `contact_id → call_started_at`. The 5-minute polling loop calls `sweep_stale_active_calls()` which releases any entry older than 30 minutes — prevents contacts getting stuck if a webhook is never delivered.
 
-**`_active_calls` is `dict[str, datetime]`, not a set.** The dict maps `contact_id → call_started_at`. The 5-minute polling loop calls `sweep_stale_active_calls()` which releases any entry older than 30 minutes. This prevents contacts getting permanently stuck if the post-call webhook is never delivered.
+**Phone vs SIP routing.** `contact.contact_method` is the sole decision field in `initiate_call()`. `"phone"` sends `customer.number`; `"sip"` sends `customer.sipUri`. Both require `phoneNumberId` — use `VAPI_SIP_TRUNK_ID` for SIP contacts (Vapi-native SIP number), `VAPI_PHONE_NUMBER_ID` for PSTN contacts.
 
-**`get_top_contacts` excludes contacts currently on a call.** Do not rely solely on the guard in `initiate_call` — exclude contacts where `call_started_at IS NOT NULL` at the scoring stage too.
+**Vapi Web SDK is the default call method.** When `VAPI_PUBLIC_KEY` is set, the browser uses `@vapi-ai/web` (loaded from esm.sh as ESM) to initiate WebRTC calls directly — free, no PSTN charges, and passes `variableValues` correctly. The SDK is loaded in a `<script type="module">` block and exposed as `window.VapiClass`. `triggerCall()` waits for the module to load before deciding: if `window.VapiClass` + `vapiConfig.vapi_public_key` are available, it calls `_startWebCall()` (SDK); otherwise it falls back to `_startBackendCall()` (PSTN/SIP via `/api/calls/trigger/{id}`).
 
-**Qdrant collection is auto-created at startup.** `ensure_collection_exists()` is called in the FastAPI startup lifespan. Collection name: `memories`, vector size: `768` (nomic-embed-text), distance: `Cosine`. Safe to call repeatedly.
+**Web SDK contact_id extraction in webhook.** Backend-initiated calls set `metadata.contact_id`. Web SDK calls pass `contact_id` in `assistantOverrides.variableValues`. The webhook `contact_id` property checks metadata first, then falls back to `call.assistantOverrides.variableValues.contact_id`. This ensures Last Called / Last Outcome are updated for both call types.
 
-**Social adapters use fixture data — no real API calls.** Fixtures are keyed by `contact.name.lower()` with a `__default__` fallback per platform. This is correct and intentional for the POC. Do not add real API credentials or HTTP calls to these adapters.
+**SSE live call flow (PSTN/SIP fallback only).** UI posts to `/api/calls/trigger/{id}` → backend calls Vapi → webhook receives events → publishes to `sse_bus` → `/api/calls/live/{id}` SSE stream delivers them to the browser. The UI has a 45s watchdog timeout in case no webhook arrives.
 
-**Social ingestion is triggered by the daily cron.** `ingest_social_updates(contact)` is called for each contact in the daily scheduling job before scoring, so social memory is fresh before calls are placed.
+**Memory retrieval is sorted by recency.** `get_memory` and `search_memory` tool endpoints sort Qdrant results by `timestamp` descending before returning, so the AI always sees the most recent memories first regardless of semantic similarity score.
+
+**Vapi variable injection.** Per-call context (`user_name`, `contact_id`, `contact_name`, `contact_tags`, `last_call_note`) is passed via `assistantOverrides.variableValues` in the Vapi call payload. These substitute `{{variable}}` placeholders in the assistant's system prompt. They are NOT persisted on the assistant.
+
+**Vapi summary.** `analysisPlan.summaryPlan` is enabled on the assistant — Vapi's GPT-4 generates the call summary. Our webhook reads it from `payload.analysis.summary`. No local LLM is needed for summarisation.
+
+**Social adapters use fixture data.** No real API credentials or HTTP calls. Fixtures are keyed by `contact.name.lower()` with a `__default__` fallback. This is correct and intentional for the POC.
 
 ---
 
@@ -113,38 +114,58 @@ tests/
 score = days_since_last_spoken * 0.6 + category_gap_score * 0.3 + priority_boost * 0.1
 ```
 
-`days_since_last_spoken` is unbounded — this is a known POC limitation. In practice it dominates the other two terms for contacts not spoken to in many days. Do not attempt to normalise it for the hackathon; it produces correct relative rankings for a small contact list.
-
----
-## Install dependencies
-Activate the venv with command `source .venv/bin/activate`
-Use command `uv sync` to install application dependencies
-Use command `uv sync --extra dev` to install dev dependencies
-
-## Testing
-
-Framework: `pytest` + `pytest-asyncio`. Property-based tests use `Hypothesis` with `@settings(max_examples=100)`.
-
-Tag every property test with:
-```python
-# Feature: contacts-catch-up-voice-assistant, Property N: <property title>
-```
-
-Mock Vapi HTTP calls using `respx` at the `httpx` boundary — do not make real Vapi API calls in tests.
-
-The integration test (`tests/integration/test_call_flow.py`) is a stretch goal. Do not block other work on it.
+`days_since_last_spoken` dominates for contacts not spoken to recently. Do not normalise it for the hackathon — it produces correct relative rankings for a small contact list.
 
 ---
 
 ## Environment Variables
 
-All credentials are read from environment variables via `app/config.py`. Required vars:
-
 ```
-VAPI_API_KEY, VAPI_ASSISTANT_ID, VAPI_PHONE_NUMBER_ID
-QDRANT_API_KEY, QDRANT_ENDPOINT
-OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
-GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN  # optional — mock used if absent
+VAPI_API_KEY            — Vapi API key (server-side only, never sent to browser)
+VAPI_PUBLIC_KEY         — Vapi public key (browser-safe; from Vapi dashboard → Account)
+VAPI_ASSISTANT_ID       — Created by setup_vapi.py
+VAPI_PHONE_NUMBER_ID    — Vapi PSTN number ID (created by setup_vapi.py)
+VAPI_SIP_TRUNK_ID       — Vapi SIP number ID (created by setup_vapi.py, optional)
+APP_BASE                — Public server URL (ngrok URL in dev)
+USER_NAME               — Your name, injected into every call prompt
+
+QDRANT_API_KEY          — Qdrant Cloud API key
+QDRANT_ENDPOINT         — Qdrant Cloud endpoint URL
+
+OPENAI_API_KEY          — OpenAI API key (or "ollama" for local)
+OPENAI_BASE_URL         — OpenAI-compatible base URL
+OPENAI_MODEL            — Model name (e.g. gpt-4o)
+
+SCHEDULER_DAILY_HOUR    — Hour to fire daily cron (default: 9)
+GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN  — optional
 ```
 
-The LLM client can be pointed at a local Ollama instance by setting `OPENAI_BASE_URL` to a local endpoint. No code changes required.
+---
+
+## Install & Run
+
+```bash
+source .venv/bin/activate
+uv sync --extra dev          # install all dependencies
+
+# One-time Vapi setup (buy phone numbers, create tools and assistant)
+python scripts/setup_vapi.py
+
+# Seed sample contacts with memories
+python scripts/seed_contacts.py
+
+# Start the server
+uvicorn app.main:app --reload --port 8000
+```
+
+---
+
+## Testing
+
+Framework: `pytest` + `pytest-asyncio`. Property-based tests use `Hypothesis`.
+
+Mock Vapi HTTP calls using `respx` at the `httpx` boundary — do not make real Vapi API calls in tests.
+
+```bash
+uv run pytest tests/unit -v
+```

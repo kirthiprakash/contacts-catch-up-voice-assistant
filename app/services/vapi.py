@@ -19,6 +19,20 @@ logger = logging.getLogger(__name__)
 # contact_id -> call_started_at  (dict, not set — needed for TTL sweep)
 _active_calls: dict[str, datetime] = {}
 
+# vapi_call_id -> contact_id  (populated by Web SDK calls via /api/calls/web-register)
+_web_call_registry: dict[str, str] = {}
+
+
+def register_web_call(call_id: str, contact_id: str) -> None:
+    """Record a browser-initiated WebRTC call so the webhook can resolve contact_id."""
+    _web_call_registry[call_id] = contact_id
+    logger.info("Registered web call %s → contact %s", call_id, contact_id)
+
+
+def get_web_call_contact(call_id: str) -> str | None:
+    """Return the contact_id for a browser-initiated call, or None."""
+    return _web_call_registry.get(call_id)
+
 VAPI_CALL_URL = "https://api.vapi.ai/call"
 VAPI_ASSISTANT_URL = "https://api.vapi.ai/assistant"
 

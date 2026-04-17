@@ -275,7 +275,8 @@ RULES:
 - Pleasantries first — never lead with the memory reference.
 - Be honest you are an AI assistant calling on {{user_name}}'s behalf.
 - Never mention tools, systems, or that you are saving notes.
-- Always use contact_id "{{contact_id}}" in every tool call.\
+- Always use contact_id "{{contact_id}}" in every tool call.
+- CRITICAL — NO HALLUCINATION: Only reference specific personal details, life events, or facts that appear word-for-word in the retrieved memories. If something is not in memory, do NOT mention it, assume it, or invent it. When in doubt, ask rather than assert.\
 """
 
 

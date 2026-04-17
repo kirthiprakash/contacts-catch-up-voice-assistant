@@ -239,6 +239,7 @@ let callSeconds = 0;
 let currentMethod = 'phone';
 let vapiConfig = null;   // loaded from /api/calls/config
 let vapiInstance = null; // active Vapi Web SDK instance
+let useWebSDK = true;    // true = browser WebRTC (Test mode), false = PSTN/SIP (Real call)
 
 // Resolved when the ESM module script finishes (success or failure)
 let _vapiSdkReadyResolve;
@@ -440,8 +441,19 @@ function renderDetailSkeleton(c) {
           Call Now
         </button>
       </div>
-      <div class="px-4 py-2 text-xs text-slate-500 border-b border-slate-800">
-        Will call via <span id="call-method-display" class="font-medium text-slate-400" data-method="${c.contact_method}" data-phone="${c.phone}" data-sip="${c.sip || ''}">${c.contact_method === 'sip' ? '🌐 SIP — ' + (c.sip || 'no SIP URI set') : '📞 Phone — ' + c.phone}</span>
+      <div class="px-4 py-2 border-b border-slate-800 flex items-center gap-3" id="call-mode-bar" data-method="${c.contact_method}" data-phone="${c.phone}" data-sip="${c.sip || ''}">
+        <span class="text-xs text-slate-500 shrink-0">Mode:</span>
+        <div class="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
+          <button id="mode-btn-test" onclick="setCallMode('test')"
+            class="px-3 py-1.5 transition-colors font-medium">
+            🔬 Test (Browser)
+          </button>
+          <button id="mode-btn-real" onclick="setCallMode('real')"
+            class="px-3 py-1.5 transition-colors font-medium">
+            📞 Real Call
+          </button>
+        </div>
+        <span id="call-method-display" class="text-xs text-slate-500 truncate"></span>
       </div>
       <div id="call-live" class="p-4 min-h-[80px] flex items-center justify-center text-slate-600 text-sm">
         No active call
@@ -484,19 +496,43 @@ async function loadMemories(contactId) {
 }
 
 // ─── Live call ────────────────────────────────────────────────────────────────
-function updateCallViaText(contact) {
-  const el = document.getElementById('call-method-display');
-  if (!el) return;
-  if (vapiConfig?.vapi_public_key) {
-    el.textContent = '🌐 Browser (WebRTC) · free';
-    el.className = 'font-medium text-emerald-400';
-  } else {
-    const m = el.dataset.method || contact?.contact_method;
-    el.textContent = m === 'sip'
-      ? `🌐 SIP — ${el.dataset.sip || contact?.sip || 'no SIP URI set'}`
-      : `📞 Phone — ${el.dataset.phone || contact?.phone}`;
-    el.className = 'font-medium text-slate-400';
+function setCallMode(mode) {
+  // mode: 'test' | 'real'
+  const webAvailable = !!(vapiConfig?.vapi_public_key);
+  if (mode === 'test' && !webAvailable) return; // can't enable test without key
+
+  useWebSDK = (mode === 'test');
+
+  const bar = document.getElementById('call-mode-bar');
+  const testBtn = document.getElementById('mode-btn-test');
+  const realBtn = document.getElementById('mode-btn-real');
+  const display = document.getElementById('call-method-display');
+  if (!bar) return;
+
+  const ACTIVE   = 'bg-sky-600 text-white';
+  const INACTIVE = 'bg-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800';
+  const DISABLED = 'bg-transparent text-slate-700 cursor-not-allowed';
+
+  if (testBtn) testBtn.className = `px-3 py-1.5 transition-colors font-medium ${useWebSDK ? ACTIVE : (webAvailable ? INACTIVE : DISABLED)}`;
+  if (realBtn) realBtn.className = `px-3 py-1.5 transition-colors font-medium ${!useWebSDK ? ACTIVE : INACTIVE}`;
+
+  if (display) {
+    if (useWebSDK) {
+      display.textContent = 'You talk to the AI in-browser · free, no PSTN charges';
+      display.className = 'text-xs text-emerald-500 truncate';
+    } else {
+      const m = bar.dataset.method;
+      const dest = m === 'sip' ? (bar.dataset.sip || 'no SIP URI') : bar.dataset.phone;
+      display.textContent = `AI dials ${dest}`;
+      display.className = 'text-xs text-slate-500 truncate';
+    }
   }
+}
+
+function updateCallViaText(contact) {
+  // Called after renderDetailSkeleton — picks the right initial mode
+  const webAvailable = !!(vapiConfig?.vapi_public_key);
+  setCallMode(webAvailable ? 'test' : 'real');
 }
 
 async function triggerCall(contactId) {
@@ -506,7 +542,7 @@ async function triggerCall(contactId) {
   try {
     await waitForVapiSDK();  // wait for ESM module to finish loading
 
-    if (vapiConfig?.vapi_public_key && window.VapiClass) {
+    if (useWebSDK && vapiConfig?.vapi_public_key && window.VapiClass) {
       await _startWebCall(contactId);
     } else {
       await _startBackendCall(contactId);
@@ -514,6 +550,12 @@ async function triggerCall(contactId) {
   } catch (e) {
     updateCallUI('error', e.message || 'Call failed');
     if (btn) { btn.disabled = false; btn.innerHTML = callBtnHTML(); }
+  }
+}
+
+function endWebCall() {
+  if (vapiInstance) {
+    try { vapiInstance.stop(); } catch {}
   }
 }
 
@@ -622,6 +664,9 @@ function updateCallUI(state, data) {
           <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
           <span class="text-sm text-emerald-300 font-medium">In progress</span>
           <span id="call-timer" class="ml-auto text-xs text-slate-500 font-mono">${formatDuration(callSeconds)}</span>
+          ${vapiInstance ? `<button onclick="endWebCall()" class="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 text-white text-xs font-medium px-3 py-1 rounded-lg transition-colors">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg> End Call
+          </button>` : ''}
         </div>
         <div id="call-events" class="space-y-1 text-xs text-slate-500"></div>
       </div>`;

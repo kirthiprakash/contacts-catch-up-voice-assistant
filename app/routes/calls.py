@@ -184,6 +184,21 @@ async def get_config():
     }
 
 
+@router.post("/web-register", summary="Register a browser WebRTC call ID to a contact")
+async def web_register_call(body: dict[str, Any]):
+    """
+    Called by the browser after vapi.start() resolves with a call ID.
+    Stores vapi_call_id → contact_id so the webhook can resolve it reliably.
+    """
+    call_id = body.get("call_id")
+    contact_id = body.get("contact_id")
+    if not call_id or not contact_id:
+        return {"status": "ignored"}
+    from app.services.vapi import register_web_call
+    register_web_call(str(call_id), str(contact_id))
+    return {"status": "registered"}
+
+
 @router.get("/active", summary="Return currently active call contact IDs")
 async def active_calls():
     from app.services.vapi import _active_calls

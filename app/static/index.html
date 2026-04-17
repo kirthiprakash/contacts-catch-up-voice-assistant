@@ -446,7 +446,7 @@ function renderDetailSkeleton(c) {
         <div class="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
           <button id="mode-btn-test" onclick="setCallMode('test')"
             class="px-3 py-1.5 transition-colors font-medium">
-            🔬 Test (Browser)
+            🔬 Test
           </button>
           <button id="mode-btn-real" onclick="setCallMode('real')"
             class="px-3 py-1.5 transition-colors font-medium">
@@ -482,6 +482,8 @@ async function loadMemories(contactId) {
       el.innerHTML = `<p class="text-xs text-slate-600 text-center py-3">No memories yet</p>`;
       return;
     }
+    // Sort newest first
+    memories.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const typeColor = { highlight: 'text-amber-400', fact: 'text-sky-400', summary: 'text-emerald-400', social: 'text-purple-400' };
     el.innerHTML = memories.map(m => `
       <div class="flex items-start gap-3 py-2 border-b border-slate-800 last:border-0">
@@ -518,8 +520,8 @@ function setCallMode(mode) {
 
   if (display) {
     if (useWebSDK) {
-      display.textContent = 'You talk to the AI in-browser · free, no PSTN charges';
-      display.className = 'text-xs text-emerald-500 truncate';
+      display.textContent = 'You will speak with the AI assistant directly — not the actual contact';
+      display.className = 'text-xs text-amber-500 truncate';
     } else {
       const m = bar.dataset.method;
       const dest = m === 'sip' ? (bar.dataset.sip || 'no SIP URI') : bar.dataset.phone;
@@ -555,7 +557,7 @@ async function triggerCall(contactId) {
 
 function endWebCall() {
   if (vapiInstance) {
-    try { vapiInstance.stop(); } catch {}
+    try { vapiInstance.end(); } catch {}
   }
 }
 
@@ -564,16 +566,39 @@ async function _startWebCall(contactId) {
   if (!contact) throw new Error('Contact not found');
 
   // Tear down any existing Vapi instance
-  if (vapiInstance) { try { vapiInstance.stop(); } catch {} vapiInstance = null; }
+  if (vapiInstance) { try { vapiInstance.end(); } catch {} vapiInstance = null; }
 
   const vapi = new window.VapiClass(vapiConfig.vapi_public_key);
   vapiInstance = vapi;
+
+  function _registerCallId(data) {
+    const callId = (typeof data === 'string' ? data : data?.id || data?.call?.id);
+    if (callId) {
+      api('POST', '/api/calls/web-register', { call_id: callId, contact_id: contactId }).catch(() => {});
+    }
+  }
+
+  // call-start-success carries the call object with ID — most reliable registration point
+  vapi.on('call-start-success', (data) => {
+    _registerCallId(data);
+  });
 
   vapi.on('call-start', () => {
     activeCallId = contactId;
     startCallTimer();
     updateCallUI('in-progress', null);
     renderList(contacts.filter(() => true));
+  });
+
+  // call-start-failed: startup errors (mic denied, network, etc.)
+  vapi.on('call-start-failed', (data) => {
+    stopCallTimer();
+    activeCallId = null;
+    vapiInstance = null;
+    const msg = data?.message || data?.error?.message || 'Call failed to start';
+    updateCallUI('error', msg);
+    const btn = document.getElementById('call-btn');
+    if (btn) { btn.disabled = false; btn.innerHTML = callBtnHTML(); }
   });
 
   vapi.on('call-end', () => {
@@ -597,7 +622,7 @@ async function _startWebCall(contactId) {
   });
 
   // Start call — vapi_assistant_id + per-contact variable overrides
-  await vapi.start(vapiConfig.vapi_assistant_id, {
+  const call = await vapi.start(vapiConfig.vapi_assistant_id, {
     variableValues: {
       user_name: vapiConfig.user_name || 'your friend',
       contact_id: contact.contact_id,
@@ -606,6 +631,10 @@ async function _startWebCall(contactId) {
       last_call_note: contact.last_call_note || 'No previous calls recorded.',
     },
   });
+
+  // Fallback registration from start() return value (call-start-success is preferred)
+  console.debug('[Vapi] start() resolved:', call);
+  _registerCallId(call);
 }
 
 async function _startBackendCall(contactId) {

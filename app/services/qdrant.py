@@ -175,8 +175,9 @@ async def delete_contact_memories(contact_id: str) -> None:
 
 async def delete_memory(entry_id: str) -> None:
     """Delete a single memory entry by its Qdrant point ID."""
+    from uuid import UUID
     client = _get_client()
     await client.delete(
         collection_name=COLLECTION_NAME,
-        points_selector=PointIdsList(points=[entry_id]),
+        points_selector=PointIdsList(points=[UUID(entry_id)]),
     )

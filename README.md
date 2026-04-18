@@ -1,16 +1,16 @@
-# RelayAI — Relationship Manager
+# Contacts Catch-Up Voice Assistant
 
 > *"Arjun secured a major funding round today. I've ordered a bouquet and I'm calling him now to congratulate."*
 
 Managing relationships — personal or professional — takes consistent effort that busy people don't always have. Old friends drift away. Business partners feel forgotten. Opportunities to reach out at the right moment get missed.
 
-**RelayAI is an autonomous AI relationship manager** that works for both personal contacts and business partners. It runs in the background, monitors news and occasions, orders gifts, and places outbound AI phone calls on your behalf — with full context about who they are, what you last talked about, and what's happening in their life right now. No human needs to remember anything. The AI handles it all.
+**Contacts Catch-Up is an autonomous AI relationship manager** that works for both personal contacts and business partners. It runs in the background, monitors news and occasions, orders gifts, and places outbound AI phone calls on your behalf — with full context about who they are, what you last talked about, and what's happening in their life right now. No human needs to remember anything. The AI handles it all.
 
 ---
 
 ## What it actually does
 
-RelayAI runs several background jobs every day, each targeting a different relationship signal:
+The system runs several background jobs every day, each targeting a different relationship signal:
 
 **Regular catch-ups:** A scoring engine ranks contacts by how overdue they are (time since last call, priority boosts, timezone-aware call windows) and calls the top-ranked ones each morning.
 

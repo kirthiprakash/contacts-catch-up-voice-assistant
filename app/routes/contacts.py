@@ -116,7 +116,7 @@ async def get_contact_memories(contact_id: str, limit: int = 30):
     try:
         from app.services.qdrant import search_memory
         entries = await search_memory(contact_id, contact_id, top_k=limit)
-        return [{"text": e.text, "type": e.type, "timestamp": e.timestamp.isoformat()} for e in entries]
+        return [{"entry_id": e.entry_id, "text": e.text, "type": e.type, "timestamp": e.timestamp.isoformat()} for e in entries]
     except Exception as exc:
         return []
 

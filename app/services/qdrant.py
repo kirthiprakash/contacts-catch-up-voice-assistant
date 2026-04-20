@@ -33,29 +33,67 @@ def _use_qdrant_inference() -> bool:
         return True
 
 
+async def _get_alias_target(client: AsyncQdrantClient, alias: str) -> str | None:
+    """Return the real collection name the alias points to, or None."""
+    try:
+        result = await client.get_collection_aliases(collection_name=alias)
+        for a in result.aliases:
+            if a.alias_name == alias:
+                return a.collection_name
+    except Exception:
+        pass
+    return None
+
+
 async def ensure_collection_exists() -> None:
     """
-    Called at startup. Creates the 'memories' collection if it does not already exist.
-    Vector size is read from EMBEDDING_VECTOR_SIZE. Safe to call repeatedly.
-    Note: changing EMBEDDING_VECTOR_SIZE on an existing collection requires deleting it first.
+    Called at startup. Creates the 'memories' collection (or alias) if it does not exist.
+    Fresh installs: creates 'memories_main' and aliases 'memories' → 'memories_main'.
+    Legacy installs with a raw 'memories' collection: left unchanged (no alias created).
+    The alias setup enables zero-downtime model migrations via scripts/migrate_embeddings.py.
     """
     settings = get_settings()
     vector_size = settings.EMBEDDING_VECTOR_SIZE
     client = _get_client()
+
+    alias_target = await _get_alias_target(client, COLLECTION_NAME)
+    if alias_target is not None:
+        # Alias already set up — ensure the payload index exists and return.
+        await client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="contact_id",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        return
+
     existing = await client.get_collections()
     names = [c.name for c in existing.collections]
-    if COLLECTION_NAME not in names:
-        await client.create_collection(
+
+    if COLLECTION_NAME in names:
+        # Legacy raw collection — leave it alone; alias can be added later via migrate script.
+        await client.create_payload_index(
             collection_name=COLLECTION_NAME,
+            field_name="contact_id",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        return
+
+    # Fresh install: create timestamped collection + alias.
+    from datetime import datetime, timezone
+    real_name = f"{COLLECTION_NAME}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    if real_name not in names:
+        await client.create_collection(
+            collection_name=real_name,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
-    # Required by some Qdrant deployments for filtered delete operations.
-    # Safe to call repeatedly.
     await client.create_payload_index(
-        collection_name=COLLECTION_NAME,
+        collection_name=real_name,
         field_name="contact_id",
         field_schema=PayloadSchemaType.KEYWORD,
     )
+    await client.update_collection_aliases(change_aliases_operations=[
+        {"create_alias": {"collection_name": real_name, "alias_name": COLLECTION_NAME}}
+    ])
 
 
 async def store_memory(entry: MemoryEntry) -> str:
@@ -67,6 +105,7 @@ async def store_memory(entry: MemoryEntry) -> str:
         "type": entry.type,
         "text": entry.text,
         "timestamp": entry.timestamp.isoformat(),
+        "embedding_model": settings.EMBEDDING_MODEL,
     }
 
     if _use_qdrant_inference():

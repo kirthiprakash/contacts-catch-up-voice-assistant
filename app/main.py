@@ -78,8 +78,10 @@ def create_app() -> FastAPI:
             return await call_next(request)
 
         path = request.url.path
-        # Open paths — no auth required
-        if not path.startswith("/api/") or path.startswith("/webhook/"):
+        # Open paths — Vapi calls tools and webhook server-to-server without our secret
+        if (not path.startswith("/api/")
+                or path.startswith("/webhook/")
+                or path.startswith("/api/calls/tools/")):
             return await call_next(request)
 
         # Check Authorization: Bearer <token> header

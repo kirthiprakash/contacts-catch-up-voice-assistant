@@ -84,13 +84,12 @@ def create_app() -> FastAPI:
                 or path.startswith("/api/calls/tools/")):
             return await call_next(request)
 
-        # Check Authorization: Bearer <token> header
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header == f"Bearer {secret}":
+        # Authorization: Bearer <token> header (API calls)
+        if request.headers.get("Authorization") == f"Bearer {secret}":
             return await call_next(request)
 
-        # SSE fallback: ?token=<secret> query param (EventSource doesn't support headers)
-        if request.query_params.get("token") == secret:
+        # Cookie auth (SSE uses this — EventSource sends cookies automatically)
+        if request.cookies.get("auth_token") == secret:
             return await call_next(request)
 
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})

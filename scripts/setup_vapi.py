@@ -394,18 +394,23 @@ def ensure_tools(client: httpx.Client) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 def patch_assistant(client: httpx.Client, assistant_id: str, tool_ids: dict[str, str]) -> None:
-    """Patch existing assistant: update prompt, serverUrl, and tool associations."""
+    """
+    Patch existing assistant: update prompt, server URL, and tool associations.
+    Preserves analysisPlan (summaryPlan) configured in the Vapi dashboard.
+    Uses the newer `server` object (takes precedence over legacy `serverUrl`).
+    """
     print(f"\n=== Phase 2: Patching assistant {assistant_id} ===\n")
 
     resp = client.get(f"{ASSISTANT_API}/{assistant_id}", headers=HEADERS, timeout=15)
     resp.raise_for_status()
-    current_model = resp.json().get("model", {})
+    current = resp.json()
+    current_model = current.get("model", {})
 
     patch_resp = client.patch(
         f"{ASSISTANT_API}/{assistant_id}",
         headers=HEADERS,
         json={
-            "serverUrl": WEBHOOK_URL,
+            "server": {"url": WEBHOOK_URL, "timeoutSeconds": 20},
             "model": {
                 "provider": current_model.get("provider", "openai"),
                 "model": current_model.get("model", "gpt-4.1"),
@@ -417,7 +422,7 @@ def patch_assistant(client: httpx.Client, assistant_id: str, tool_ids: dict[str,
     )
     patch_resp.raise_for_status()
     restored = patch_resp.json().get("model", {}).get("toolIds") or []
-    print(f"  ✓ Prompt + serverUrl updated — {len(restored)} tools on assistant {assistant_id}")
+    print(f"  ✓ Prompt + server.url updated — {len(restored)} tools on assistant {assistant_id}")
 
 
 def create_assistant(client: httpx.Client, tool_ids: dict[str, str]) -> str:
@@ -429,7 +434,7 @@ def create_assistant(client: httpx.Client, tool_ids: dict[str, str]) -> str:
         headers=HEADERS,
         json={
             "name": "Contacts Catch-up",
-            "serverUrl": WEBHOOK_URL,
+            "server": {"url": WEBHOOK_URL, "timeoutSeconds": 20},
             "model": {
                 "provider": "openai",
                 "model": "gpt-4.1",
@@ -450,7 +455,13 @@ def create_assistant(client: httpx.Client, tool_ids: dict[str, str]) -> str:
                 "fallbackPlan": {"autoFallback": {"enabled": True}},
             },
             "analysisPlan": {
-                "summaryPlan": {"enabled": False},
+                "summaryPlan": {
+                    "enabled": True,
+                    "messages": [
+                        {"role": "system", "content": "You are summarizing a catch-up call. Write 2-3 sentences covering: what was discussed, any notable updates the contact shared, and any follow-up planned. Be concise and factual."},
+                        {"role": "user", "content": "Here is the transcript:\n\n{{transcript}}\n\n. Here is the ended reason of the call:\n\n{{endedReason}}\n\n"},
+                    ],
+                },
                 "successEvaluationPlan": {"enabled": False},
             },
             "backgroundDenoisingEnabled": True,

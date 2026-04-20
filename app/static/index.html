@@ -286,6 +286,8 @@ let vapiConfig = null;   // loaded from /api/calls/config
 let vapiInstance = null; // active Vapi Web SDK instance
 let useWebSDK = true;    // true = browser WebRTC (Test mode), false = PSTN/SIP (Real call)
 let authToken = localStorage.getItem('auth_token') || '';
+// Restore cookie from localStorage so SSE works after a page reload
+if (authToken) document.cookie = `auth_token=${encodeURIComponent(authToken)}; path=/; SameSite=Strict`;
 
 // Resolved when the ESM module script finishes (success or failure)
 let _vapiSdkReadyResolve;
@@ -315,6 +317,7 @@ async function submitLogin() {
   if (r.ok || r.status === 404) {
     authToken = pw;
     localStorage.setItem('auth_token', pw);
+    document.cookie = `auth_token=${encodeURIComponent(pw)}; path=/; SameSite=Strict`;
     hideLoginScreen();
     init();
   } else {
@@ -325,6 +328,7 @@ async function submitLogin() {
 function logout() {
   authToken = '';
   localStorage.removeItem('auth_token');
+  document.cookie = 'auth_token=; path=/; max-age=0';
   showLoginScreen();
 }
 
@@ -826,7 +830,7 @@ async function _startWebCall(contactId) {
   // Pre-fetch memories so the assistant has them in context from word one
   let recentMemories = '';
   try {
-    const memCtx = await fetch(`/api/contacts/${contact.contact_id}/memories/context`).then(r => r.json());
+    const memCtx = await api('GET', `/api/contacts/${contact.contact_id}/memories/context`);
     recentMemories = memCtx.recent_memories || '';
   } catch (e) {
     console.warn('[Vapi] Could not pre-fetch memories:', e);
@@ -910,9 +914,9 @@ async function triggerOccasionCall(contactId, occasion) {
   try {
     // Fetch pre-computed variableValues for this occasion (includes occasion_context,
     // tone_instructions, meeting_ask_section, gift_status, recent_memories)
-    const { variable_values, assistant_id } = await fetch(
-      `/api/calls/occasion-variables/${contactId}?occasion=${encodeURIComponent(occasion)}`
-    ).then(r => r.json());
+    const { variable_values, assistant_id } = await api(
+      'GET', `/api/calls/occasion-variables/${contactId}?occasion=${encodeURIComponent(occasion)}`
+    );
 
     subscribeCallSSE(contactId);
     const { vapi, registerCallId } = _createVapiInstance(contactId);
@@ -1013,10 +1017,7 @@ function appendCallEvent(text) {
 
 function subscribeCallSSE(contactId) {
   if (sseSource) sseSource.close();
-  const sseUrl = authToken
-    ? `/api/calls/live/${contactId}?token=${encodeURIComponent(authToken)}`
-    : `/api/calls/live/${contactId}`;
-  sseSource = new EventSource(sseUrl);
+  sseSource = new EventSource(`/api/calls/live/${contactId}`);
 
   // If no webhook arrives within 45s, assume the call failed silently (e.g. dummy SIP)
   const watchdog = setTimeout(() => {

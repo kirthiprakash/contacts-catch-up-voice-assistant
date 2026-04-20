@@ -26,6 +26,28 @@
 </head>
 <body class="h-full bg-slate-950 text-slate-100 font-sans antialiased">
 
+<!-- Login screen -->
+<div id="login-screen" class="hidden fixed inset-0 z-50 bg-slate-950 flex items-center justify-center">
+  <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-2xl">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/>
+        </svg>
+      </div>
+      <span class="font-semibold text-lg">Contacts Catch-Up</span>
+    </div>
+    <p class="text-sm text-slate-400 mb-4">Enter your access key to continue.</p>
+    <input id="login-password" type="password" placeholder="Access key"
+      onkeydown="if(event.key==='Enter') submitLogin()"
+      class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 mb-3" />
+    <p id="login-error" class="hidden text-xs text-red-400 mb-3">Incorrect access key.</p>
+    <button onclick="submitLogin()" class="w-full bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+      Sign in
+    </button>
+  </div>
+</div>
+
 <div id="app" class="h-full flex flex-col">
 
   <!-- Top bar -->
@@ -38,10 +60,15 @@
       </div>
       <span class="font-semibold text-slate-100">Contacts Catch-Up</span>
     </div>
-    <button onclick="openModal()" class="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-      New Contact
-    </button>
+    <div class="flex items-center gap-2">
+      <button onclick="openModal()" class="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        New Contact
+      </button>
+      <button onclick="logout()" title="Sign out" class="text-slate-500 hover:text-slate-300 p-1.5 rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75"/></svg>
+      </button>
+    </div>
   </header>
 
   <div class="flex flex-1 overflow-hidden">
@@ -258,12 +285,48 @@ let currentMethod = 'phone';
 let vapiConfig = null;   // loaded from /api/calls/config
 let vapiInstance = null; // active Vapi Web SDK instance
 let useWebSDK = true;    // true = browser WebRTC (Test mode), false = PSTN/SIP (Real call)
+let authToken = localStorage.getItem('auth_token') || '';
 
 // Resolved when the ESM module script finishes (success or failure)
 let _vapiSdkReadyResolve;
 const _vapiSdkReady = new Promise(r => { _vapiSdkReadyResolve = r; });
 window.addEventListener('vapi-sdk-ready', () => _vapiSdkReadyResolve());
 function waitForVapiSDK() { return _vapiSdkReady; }
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+function showLoginScreen() {
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-error').classList.add('hidden');
+}
+
+function hideLoginScreen() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+}
+
+async function submitLogin() {
+  const pw = document.getElementById('login-password').value.trim();
+  if (!pw) return;
+  // Probe the API with the given password
+  const r = await fetch('/api/contacts', {
+    headers: { 'Authorization': `Bearer ${pw}` }
+  });
+  if (r.ok || r.status === 404) {
+    authToken = pw;
+    localStorage.setItem('auth_token', pw);
+    hideLoginScreen();
+    init();
+  } else {
+    document.getElementById('login-error').classList.remove('hidden');
+  }
+}
+
+function logout() {
+  authToken = '';
+  localStorage.removeItem('auth_token');
+  showLoginScreen();
+}
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 async function init() {
@@ -276,11 +339,24 @@ async function init() {
   if (hash) selectContact(hash);
 }
 
+async function boot() {
+  if (!authToken) { showLoginScreen(); return; }
+  // Check if the stored token is still valid
+  const r = await fetch('/api/contacts', {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  if (r.status === 401) { showLoginScreen(); return; }
+  hideLoginScreen();
+  init();
+}
+
 // ─── API helpers ──────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (authToken) opts.headers['Authorization'] = `Bearer ${authToken}`;
   if (body !== undefined) opts.body = JSON.stringify(body);
   const r = await fetch(path, opts);
+  if (r.status === 401) { showLoginScreen(); throw new Error('Unauthorized'); }
   if (!r.ok) {
     const err = await r.json().catch(() => ({ detail: r.statusText }));
     throw new Error(err.detail || r.statusText);
@@ -937,7 +1013,10 @@ function appendCallEvent(text) {
 
 function subscribeCallSSE(contactId) {
   if (sseSource) sseSource.close();
-  sseSource = new EventSource(`/api/calls/live/${contactId}`);
+  const sseUrl = authToken
+    ? `/api/calls/live/${contactId}?token=${encodeURIComponent(authToken)}`
+    : `/api/calls/live/${contactId}`;
+  sseSource = new EventSource(sseUrl);
 
   // If no webhook arrives within 45s, assume the call failed silently (e.g. dummy SIP)
   const watchdog = setTimeout(() => {
@@ -1140,7 +1219,7 @@ async function confirmDelete() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 setMethod('phone');
-init();
+boot();
 </script>
 </body>
 </html>

@@ -22,10 +22,14 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str
     QDRANT_ENDPOINT: str
 
-    # Embedding (OpenAI-compatible; supports Gemini, nomic, etc.)
+    # Embedding — Gemini URL triggers native embedContent API; any other URL uses OpenAI-compat
     EMBEDDING_API_KEY: str
     EMBEDDING_BASE_URL: str
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_MODEL: str = "gemini-embedding-001"
+    EMBEDDING_VECTOR_SIZE: int = 3072  # 3072 for Gemini models; 768 for nomic-embed-text
+
+    # Auth — set APP_SECRET_KEY to protect the dashboard and API; empty = auth disabled
+    APP_SECRET_KEY: str = ""
 
     # Google Calendar (optional)
     GOOGLE_CLIENT_ID: str = ""

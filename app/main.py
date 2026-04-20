@@ -1,7 +1,8 @@
 import logging
 import logging.config
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 # Configure logging before any loggers are created.
@@ -61,6 +62,36 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    # Auth middleware — protects /api/* routes when APP_SECRET_KEY is set.
+    # Exempt: /webhook/vapi (called by Vapi), /health, /static/*, / (HTML login handles itself)
+    # SSE endpoints accept token as ?token= query param (EventSource can't set headers).
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        from app.config import get_settings
+        try:
+            secret = get_settings().APP_SECRET_KEY
+        except Exception:
+            return await call_next(request)
+
+        if not secret:
+            return await call_next(request)
+
+        path = request.url.path
+        # Open paths — no auth required
+        if not path.startswith("/api/") or path.startswith("/webhook/"):
+            return await call_next(request)
+
+        # Check Authorization: Bearer <token> header
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header == f"Bearer {secret}":
+            return await call_next(request)
+
+        # SSE fallback: ?token=<secret> query param (EventSource doesn't support headers)
+        if request.query_params.get("token") == secret:
+            return await call_next(request)
+
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
     # Register routers (imported lazily to avoid circular imports)
     from app.routes import contacts, calls, webhook, dashboard

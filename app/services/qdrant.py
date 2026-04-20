@@ -14,7 +14,6 @@ from app.models.memory import MemoryEntry
 from app.config import get_settings
 
 COLLECTION_NAME = "memories"
-VECTOR_SIZE = 768
 
 
 def _get_client() -> AsyncQdrantClient:
@@ -27,16 +26,19 @@ def _get_client() -> AsyncQdrantClient:
 
 async def ensure_collection_exists() -> None:
     """
-    Called at startup. Creates the 'memories' collection with vector_size=768
-    and distance=Cosine if it does not already exist. Safe to call repeatedly.
+    Called at startup. Creates the 'memories' collection if it does not already exist.
+    Vector size is read from EMBEDDING_VECTOR_SIZE. Safe to call repeatedly.
+    Note: changing EMBEDDING_VECTOR_SIZE on an existing collection requires deleting it first.
     """
+    settings = get_settings()
+    vector_size = settings.EMBEDDING_VECTOR_SIZE
     client = _get_client()
     existing = await client.get_collections()
     names = [c.name for c in existing.collections]
     if COLLECTION_NAME not in names:
         await client.create_collection(
             collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
     # Required by some Qdrant deployments for filtered delete operations.
     # Safe to call repeatedly.

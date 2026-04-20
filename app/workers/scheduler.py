@@ -494,8 +494,16 @@ def start_scheduler() -> None:
     - Daily cron job at 09:00 (configurable via SCHEDULER_DAILY_HOUR env var)
     - 5-minute polling interval job
     - Crash recovery scan on startup
+
+    Set SCHEDULER_ENABLED=false to disable all scheduled calls (e.g. on Railway
+    where seed/fake contacts should not receive real calls).
     """
+    import os
     global _scheduler
+
+    if os.environ.get("SCHEDULER_ENABLED", "true").lower() in ("false", "0", "no"):
+        logger.info("Scheduler disabled via SCHEDULER_ENABLED=false — no automated calls will be made")
+        return
 
     if _scheduler is not None and _scheduler.running:
         logger.warning("start_scheduler called but scheduler is already running")

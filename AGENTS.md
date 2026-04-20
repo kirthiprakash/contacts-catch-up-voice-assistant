@@ -25,9 +25,10 @@ This is a **hackathon POC** — optimise for working demo over production robust
 ## Architecture at a Glance
 
 - **FastAPI HTTP server** — SPA (`/`), contact API (`/api/contacts`), call trigger + SSE stream (`/api/calls`), Vapi tool endpoints (`/api/calls/tools/*`), webhook handler (`/webhook/vapi`)
+- **Auth middleware** — Bearer token + cookie auth on all `/api/*` routes when `APP_SECRET_KEY` is set; `/webhook/vapi` and `/api/calls/tools/*` are exempt (Vapi server-to-server)
 - **APScheduler background workers** — daily cron (scoring + call trigger) and 5-minute polling loop (callback checks + stale call sweep)
 - **SSE pub/sub bus** (`app/sse_bus.py`) — webhook publishes events; `/api/calls/live/{id}` streams them to the browser UI in real time
-- **External services** — Vapi (voice calls), Qdrant Cloud (vector memory), OpenAI-compatible LLM (fallback classification + embeddings)
+- **External services** — Vapi (voice calls), Qdrant Cloud (vector memory + optional cloud inference for embeddings)
 
 Two datastores: **SQLite** holds structured contact records; **Qdrant** holds semantic memory entries (embeddings of highlights, facts, summaries, and social updates per contact).
 
@@ -67,8 +68,10 @@ app/
     index.html           # Single-page app (Tailwind CSS + vanilla JS, no build step)
     tailwind.js          # Tailwind Play CDN served locally (committed to repo)
 scripts/
-  setup_vapi.py          # One-shot Vapi provisioning: PSTN number, SIP number, tools, assistant
+  setup_vapi.py          # Idempotent Vapi provisioning: PSTN number, SIP number, tools, assistant
   seed_contacts.py       # Seed SQLite + Qdrant with sample contacts and memories
+  migrate_embeddings.py  # Zero-downtime embedding model migration via Qdrant collection aliases
+  benchmark_embeddings.py # Compare embedding models for retrieval quality and latency
 tests/
   unit/
   integration/
@@ -122,6 +125,12 @@ tests/
 
 **Commitment detection in webhook.** `process_call_webhook()` scans the call summary for commitment phrases ("next quarter", "next month", etc.). If found, stores a `"commitment"` memory entry and calls `schedule_one_off_call()` to set `next_call_at` the appropriate number of days out.
 
+**Embedding provider abstraction.** `EMBEDDING_PROVIDER=qdrant` uses Qdrant cloud inference (`Document(text, model)` + `cloud_inference=True`) — free, no external API key. `EMBEDDING_PROVIDER=external` routes through `app/services/embedding.py` which auto-detects Gemini URLs (native `embedContent` API) vs all other providers (OpenAI-compat endpoint). The `qdrant.py` service branches on `_use_qdrant_inference()` and stores `embedding_model` in each point's payload for future migration auditing.
+
+**Qdrant collection aliases for zero-downtime migration.** `ensure_collection_exists()` creates a timestamped collection (e.g. `memories_20260420143022`) and an alias `memories` pointing to it on fresh installs. The app always uses the alias name `COLLECTION_NAME = "memories"`. `scripts/migrate_embeddings.py` backfills a new timestamped collection then atomically updates the alias — no downtime, no app code changes needed.
+
+**Auth middleware.** When `APP_SECRET_KEY` is set, `app/main.py` protects all `/api/*` routes. Accepts `Authorization: Bearer <key>` header (API calls) or `auth_token` cookie (SSE — EventSource cannot set custom headers). `/webhook/vapi` and `/api/calls/tools/*` are always exempt so Vapi server-to-server calls are never blocked.
+
 **Mock CRM adapter pattern.** `app/services/crm.py` follows the same fixture-based pattern as social adapters — `DEAL_FIXTURES` dict keyed by lowercase contact name, `get_closed_deal_today()` function. Swap for real Salesforce/HubSpot API calls in production.
 
 **Vapi summary.** `analysisPlan.summaryPlan` is enabled on the assistant — Vapi's GPT-4 generates the call summary. Our webhook reads it from `payload.analysis.summary`. No local LLM is needed for summarisation.
@@ -150,14 +159,19 @@ VAPI_PHONE_NUMBER_ID    — Vapi PSTN number ID (created by setup_vapi.py)
 VAPI_SIP_TRUNK_ID       — Vapi SIP number ID (created by setup_vapi.py, optional)
 APP_BASE                — Public server URL (ngrok URL in dev)
 USER_NAME               — Your name, injected into every call prompt
+APP_SECRET_KEY          — Random secret protecting /api/* routes; empty = auth disabled
 
 QDRANT_API_KEY          — Qdrant Cloud API key
 QDRANT_ENDPOINT         — Qdrant Cloud endpoint URL
 
-OPENAI_API_KEY          — OpenAI API key (or "ollama" for local)
-OPENAI_BASE_URL         — OpenAI-compatible base URL
-OPENAI_MODEL            — Model name (e.g. gpt-4o)
+EMBEDDING_PROVIDER      — "qdrant" (default, free cloud inference) or "external"
+EMBEDDING_MODEL         — Model name (default: sentence-transformers/all-minilm-l6-v2)
+EMBEDDING_VECTOR_SIZE   — Vector dims matching the model (default: 384)
+EMBEDDING_API_KEY       — Required only when EMBEDDING_PROVIDER=external
+EMBEDDING_BASE_URL      — Required only when EMBEDDING_PROVIDER=external
 
+DATABASE_URL            — SQLite path (default: contacts.db; use /data/contacts.db on Railway)
+SCHEDULER_ENABLED       — Set to "false" to disable all automated calls (default: true)
 SCHEDULER_DAILY_HOUR    — Hour to fire daily cron (default: 9)
 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN  — optional
 ```

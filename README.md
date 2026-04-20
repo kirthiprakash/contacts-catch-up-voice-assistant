@@ -105,9 +105,14 @@ cp .env.example .env
 | `USER_NAME` | Yes | Your name — the AI introduces itself as calling on your behalf |
 | `QDRANT_API_KEY` | Yes | Qdrant Cloud API key — [cloud.qdrant.io](https://cloud.qdrant.io) |
 | `QDRANT_ENDPOINT` | Yes | Qdrant Cloud endpoint URL |
-| `OPENAI_API_KEY` | Yes | OpenAI API key (used for fallback outcome classification) |
-| `OPENAI_BASE_URL` | Yes | OpenAI-compatible base URL (`https://api.openai.com/v1`) |
-| `OPENAI_MODEL` | Yes | Model name (e.g. `gpt-4o`) |
+| `EMBEDDING_PROVIDER` | No | `qdrant` (default, free) or `external` (Gemini / OpenAI-compat) |
+| `EMBEDDING_MODEL` | No | Model name — default `sentence-transformers/all-minilm-l6-v2` |
+| `EMBEDDING_VECTOR_SIZE` | No | Vector dimensions matching the model — default `384` |
+| `EMBEDDING_API_KEY` | No | API key — required only when `EMBEDDING_PROVIDER=external` |
+| `EMBEDDING_BASE_URL` | No | Base URL — required only when `EMBEDDING_PROVIDER=external` |
+| `APP_SECRET_KEY` | No | Random secret to protect the dashboard and API on public deployments |
+| `DATABASE_URL` | No | SQLite path — default `contacts.db`; use `/data/contacts.db` on Railway |
+| `SCHEDULER_ENABLED` | No | Set to `false` to disable all automated calls (default `true`) |
 | `VAPI_SIP_TRUNK_ID` | No | Vapi SIP number ID for SIP-mode contacts — created by `setup_vapi.py` |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth — for calendar-aware scheduling |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret |
@@ -142,7 +147,7 @@ python scripts/setup_vapi.py
 
 **Phase 0b — Vapi SIP number:** Creates a Vapi-managed SIP number (`sip:contacts-catchup@sip.vapi.ai`) — no third-party SIP provider needed. Skipped if `VAPI_SIP_TRUNK_ID` is already set.
 
-**Phase 1 — Tools:** Creates all 6 server tools pointing to your `APP_BASE`. Exits with an error if any tool name already exists — delete them in the Vapi dashboard first.
+**Phase 1 — Tools:** Creates all 6 server tools pointing to your `APP_BASE`. Idempotent — if a tool already exists by name, it patches the server URL instead of failing.
 
 **Phase 2 — Assistant:** Creates the assistant with the full system prompt, voice config, tool bindings, and `serverUrl` for webhooks.
 
@@ -357,7 +362,7 @@ The top-ranked contacts above a minimum threshold get called each day.
 
 ### Disabling the scheduler
 
-The scheduler starts automatically with the server. If you want to manage calls manually only (via the Call Now button), you can comment out `start_scheduler()` in `app/main.py`.
+Set `SCHEDULER_ENABLED=false` in your `.env` (or Railway environment) to prevent any automated calls. The server starts normally; only the Call Now button triggers calls.
 
 ---
 
@@ -389,7 +394,9 @@ app/
   static/
     index.html        # Single-page application (Tailwind CSS, vanilla JS)
 scripts/
-  setup_vapi.py       # One-shot Vapi provisioning (tools + assistant)
+  setup_vapi.py          # Idempotent Vapi provisioning (tools + assistant)
+  migrate_embeddings.py  # Zero-downtime embedding model migration via Qdrant aliases
+  benchmark_embeddings.py # Compare embedding models (quality + latency)
 tests/
   unit/               # Unit tests (35 passing)
 ```
@@ -439,4 +446,3 @@ Here's a full day in the life of the system managing **Arjun Mehta**, a SaaS fou
 - Multi-user support with per-user assistant provisioning
 - Mobile app for managing contacts on the go
 - Multi-language support. Change voice based on contact's locale
-- Use inference from from Qdrant
